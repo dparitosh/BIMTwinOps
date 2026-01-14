@@ -1,0 +1,10 @@
+[submodule "backend/pointnet_s3dis"]
+	path = backend/pointnet_s3dis
+	url = https://github.com/bhupesh-varma/pointnet_s3dis.git
+
+# Reference: This project is based on digitaltwin_pointcloud
+# https://github.com/bhupesh-varma/digitaltwin_pointcloud
+# The base code has been enhanced with:
+# - APS (Autodesk Platform Services) SDK integration
+# - TCS corporate branding/styling
+# - Additional viewer components (AccBrowser, ApsViewer, OssUploadTranslate)

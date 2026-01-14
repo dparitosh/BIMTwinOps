@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Datasets & generated data
+# ======================
+# ML DATASETS (DO NOT COMMIT)
+# ======================
+# ======================
+# PointNet / S3DIS datasets
+# ======================
+
+backend/pointnet_s3dis/s3dis_data/
+backend/pointnet_s3dis/s3dis_data/**
+
+backend/pointnet_s3dis/Stanford3dDataset_v1.2_Aligned_Version/
+backend/pointnet_s3dis/Stanford3dDataset_v1.2_Aligned_Version/**
+
+backend/pointnet_s3dis/**/processed/
+backend/pointnet_s3dis/**/processed/**
+
+
+# Large data formats
+*.npy
+*.h5
+*.ply
+*.pcd
+*.txt
+
+# Python cache
+__pycache__/
+*.pyc
+
+
+# Logs
+*.log

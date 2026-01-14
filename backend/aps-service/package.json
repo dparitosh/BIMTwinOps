@@ -1,0 +1,22 @@
+{
+  "name": "smart-bim-aps-service",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@aps_sdk/authentication": "^1.0.0",
+    "@aps_sdk/data-management": "^1.0.0",
+    "@aps_sdk/model-derivative": "^1.0.0",
+    "@aps_sdk/oss": "^1.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "http-proxy-middleware": "^3.0.2",
+    "multer": "^1.4.5-lts.1",
+    "redis": "^4.7.0"
+  }
+}

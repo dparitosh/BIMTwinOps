@@ -1,0 +1,232 @@
+@import "tailwindcss";
+
+/* ============================================
+   TCS Brand Design System
+   Primary: #0076CE (TCS Blue)
+   Secondary: #1A3D6D (Navy)
+   Accent: #FF6600 (Orange)
+   Background: #F5F7FA (Light Gray)
+   Surface: #FFFFFF (White)
+   Text: #1E293B (Dark Slate)
+   ============================================ */
+
+:root {
+  /* TCS Brand Colors */
+  --tcs-blue: #0076CE;
+  --tcs-blue-dark: #005BA1;
+  --tcs-blue-light: #3399E0;
+  --tcs-navy: #1A3D6D;
+  --tcs-navy-dark: #0F2847;
+  --tcs-orange: #FF6600;
+  --tcs-orange-light: #FF8533;
+  
+  /* Neutral Palette */
+  --bg-primary: #F5F7FA;
+  --bg-secondary: #FFFFFF;
+  --bg-dark: #1E293B;
+  --surface: #FFFFFF;
+  --surface-hover: #F0F4F8;
+  --border-light: #E2E8F0;
+  --border-medium: #CBD5E1;
+  
+  /* Text Colors */
+  --text-primary: #1E293B;
+  --text-secondary: #64748B;
+  --text-muted: #94A3B8;
+  --text-inverse: #FFFFFF;
+  
+  /* Status Colors */
+  --success: #10B981;
+  --warning: #F59E0B;
+  --error: #EF4444;
+  --info: #0076CE;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-card: 0 2px 8px rgba(26, 61, 109, 0.08);
+  
+  /* Legacy compatibility */
+  --neon-blue: var(--tcs-blue);
+  --neon-pink: var(--tcs-orange);
+  --neon-yellow: var(--tcs-orange-light);
+}
+
+/* Loading state for root element */
+.root-loading {
+  padding: 24px;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* TCS Glass Card Style */
+.glass {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+}
+
+.glass:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* TCS Button Styles */
+.tcs-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.tcs-btn-primary {
+  background: linear-gradient(135deg, var(--tcs-blue), var(--tcs-blue-dark));
+  color: var(--text-inverse);
+}
+
+.tcs-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--tcs-blue-light), var(--tcs-blue));
+  box-shadow: 0 4px 12px rgba(0, 118, 206, 0.3);
+  transform: translateY(-1px);
+}
+
+.tcs-btn-secondary {
+  background: var(--surface);
+  color: var(--tcs-blue);
+  border: 1px solid var(--tcs-blue);
+}
+
+.tcs-btn-secondary:hover:not(:disabled) {
+  background: rgba(0, 118, 206, 0.08);
+}
+
+.tcs-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* TCS Input Styles */
+.tcs-input,
+.tcs-select {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-primary);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.tcs-input:focus,
+.tcs-select:focus {
+  outline: none;
+  border-color: var(--tcs-blue);
+  box-shadow: 0 0 0 3px rgba(0, 118, 206, 0.15);
+}
+
+.tcs-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* TCS Tab Styles */
+.tcs-tab {
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s;
+}
+
+.tcs-tab:hover {
+  color: var(--tcs-blue);
+}
+
+.tcs-tab.active {
+  color: var(--tcs-blue);
+}
+
+.tcs-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--tcs-blue);
+  border-radius: 3px 3px 0 0;
+}
+
+/* TCS Header */
+.tcs-header {
+  background: linear-gradient(135deg, var(--tcs-navy), var(--tcs-navy-dark));
+  color: var(--text-inverse);
+  padding: 16px 24px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-md);
+}
+
+/* TCS Badge */
+.tcs-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 20px;
+  background: rgba(0, 118, 206, 0.1);
+  color: var(--tcs-blue);
+}
+
+.tcs-badge-success {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+}
+
+.tcs-badge-warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
