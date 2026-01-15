@@ -17,13 +17,25 @@ from pointnet_s3dis.online_segmentation import process_uploaded_array
 
 
 env_path = Path(__file__).resolve().parent.parent / ".env"
+if not env_path.exists():
+    raise RuntimeError(f"Missing .env file at {env_path}. Copy .env.example to .env and configure.")
 load_dotenv(env_path)
 
+# All configuration from .env - no hardcoded defaults
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-NEO4J_URI = os.getenv("NEO4J_URI", "neo4j://127.0.0.1:7687")
-NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "tcs12345")
-NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "smartbim")
+NEO4J_URI = os.getenv("NEO4J_URI")
+NEO4J_USER = os.getenv("NEO4J_USER")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE")
+
+# Ollama configuration (local LLM)
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3:latest")
+OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text:latest")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")  # "ollama" or "gemini"
+
+if not NEO4J_URI or not NEO4J_USER or not NEO4J_PASSWORD:
+    raise RuntimeError("Missing Neo4j configuration. Set NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD in .env")
 
 try:
     driver = GraphDatabase.driver(NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
@@ -85,12 +97,29 @@ class ChatReq(BaseModel):
 
 @app.post("/upload")
 async def upload_pointcloud(file: UploadFile = File(...)):
+    # Check file type
+    filename_lower = file.filename.lower()
+    if filename_lower.endswith(('.ifc', '.rvt', '.dwg', '.dxf', '.nwd', '.nwc')):
+        raise HTTPException(
+            status_code=400,
+            detail=f"BIM model files (.ifc, .rvt, etc.) should be uploaded via APS Viewer tab, not PointCloud tab. "
+                   f"This endpoint accepts .npy point cloud files or text-based coordinate files (CSV/TXT)."
+        )
+    
     data = await file.read()
-    if file.filename.endswith(".npy"):
+    if filename_lower.endswith(".npy"):
         np_array = np.load(io.BytesIO(data))
     else:
-        from io import StringIO
-        np_array = np.loadtxt(StringIO(data.decode("utf-8")))
+        # Try to parse as text coordinates (CSV/TXT)
+        try:
+            from io import StringIO
+            np_array = np.loadtxt(StringIO(data.decode("utf-8")))
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to parse file as point cloud data. Expected .npy or text coordinates (CSV/TXT). Error: {str(e)}"
+            )
+    
     scene_id = os.path.splitext(file.filename)[0]
     return process_uploaded_array(np_array, scene_id=scene_id)
 
@@ -244,6 +273,44 @@ def call_gemini(system_instruction: str, user_prompt: str, timeout: int = 30) ->
             continue
     raise RuntimeError(f"Gemini failed: {last_err}")
 
+
+def call_ollama(system_instruction: str, user_prompt: str, timeout: int = 60) -> str:
+    """Call local Ollama LLM for text generation."""
+    url = f"{OLLAMA_BASE_URL}/api/generate"
+    merged_prompt = f"{system_instruction.strip()}\n\n{user_prompt.strip()}"
+    
+    body = {
+        "model": OLLAMA_MODEL,
+        "prompt": merged_prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0.3,
+            "num_predict": 500
+        }
+    }
+    
+    try:
+        resp = requests.post(url, json=body, timeout=timeout)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Ollama error {resp.status_code}: {resp.text}")
+        data = resp.json()
+        return data.get("response", "")
+    except requests.exceptions.ConnectionError:
+        raise RuntimeError(f"Cannot connect to Ollama at {OLLAMA_BASE_URL}. Make sure Ollama is running.")
+    except Exception as e:
+        raise RuntimeError(f"Ollama failed: {e}")
+
+
+def call_llm(system_instruction: str, user_prompt: str, timeout: int = 60) -> str:
+    """Call the configured LLM provider (Ollama or Gemini)."""
+    if LLM_PROVIDER == "ollama":
+        return call_ollama(system_instruction, user_prompt, timeout)
+    elif LLM_PROVIDER == "gemini":
+        return call_gemini(system_instruction, user_prompt, timeout)
+    else:
+        # Default to Ollama
+        return call_ollama(system_instruction, user_prompt, timeout)
+
 def synthesize_conversational_reply(question: str, cypher: str, rows: List[Dict[str, Any]]) -> str:
     """
     Ask the LLM to produce a 1-2 sentence conversational reply about the scene.
@@ -272,7 +339,7 @@ def synthesize_conversational_reply(question: str, cypher: str, rows: List[Dict[
 
     # Try LLM first
     try:
-        reply_text = call_gemini(sys_inst, prompt)
+        reply_text = call_llm(sys_inst, prompt)
         if reply_text:
             # strip codeblocks and whitespace
             reply = re.sub(r"```[\s\S]*?```", "", reply_text).strip()
@@ -314,10 +381,10 @@ async def chat(req: ChatReq):
 
     cypher = ""
     llm_explain = ""
-    # 1) Try to get cypher from Gemini
+    # 1) Try to get cypher from LLM
     try:
         user_prompt = f"Scene ID: {req.scene_id}\nQuestion: {req.question}"
-        raw_llm = call_gemini(SYSTEM_PROMPT_GEN_CYPHER, user_prompt)
+        raw_llm = call_llm(SYSTEM_PROMPT_GEN_CYPHER, user_prompt)
     except Exception as e:
         raw_llm = ""
         # try local fallback pattern before failing
@@ -326,7 +393,7 @@ async def chat(req: ChatReq):
             cypher = cy_from_pattern
             llm_explain = f"(fallback pattern) {explain}"
         else:
-            raise HTTPException(status_code=502, detail=f"Gemini error: {e}")
+            raise HTTPException(status_code=502, detail=f"LLM error: {e}")
     else:
         cypher, llm_explain = extract_cypher_from_text(raw_llm)
         cypher = normalize_distance_and_sanitize(cypher)

@@ -89,8 +89,18 @@ if ($startAps) {
 }
 
 if ($startApi) {
+  # Load .env to get BACKEND_PORT
+  $envPath = Join-Path $repoRoot 'backend\.env'
+  $backendPort = '8000'
+  if (Test-Path $envPath) {
+    $envContent = Get-Content $envPath
+    $portLine = $envContent | Where-Object { $_ -match '^BACKEND_PORT\s*=\s*(.+)' }
+    if ($portLine) {
+      $backendPort = $Matches[1].Trim()
+    }
+  }
   # Requires python + uvicorn installed in your environment.
-  Start-TrackedProcess -name 'api' -workingDir (Join-Path $repoRoot 'backend') -command 'python -m uvicorn api.main:app --host 127.0.0.1 --port 8000 --reload'
+  Start-TrackedProcess -name 'api' -workingDir (Join-Path $repoRoot 'backend') -command "python -m uvicorn api.main:app --host 127.0.0.1 --port $backendPort --reload"
 }
 
 Write-Host "Logs + PIDs in: $pidDir"

@@ -16,16 +16,21 @@ import math
 import argparse
 from pathlib import Path
 from neo4j import GraphDatabase
-try:
-    from dotenv import load_dotenv
-    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-except Exception:
-    pass
+from dotenv import load_dotenv
 
-# Read connection info (falls back to defaults)
-NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "tcs12345")
+env_path = Path(__file__).resolve().parent.parent / ".env"
+if not env_path.exists():
+    raise RuntimeError(f"Missing .env file at {env_path}. Copy .env.example to .env and configure.")
+load_dotenv(env_path)
+
+# All configuration from .env - no hardcoded defaults
+NEO4J_URI = os.getenv("NEO4J_URI")
+NEO4J_USER = os.getenv("NEO4J_USER")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE")
+
+if not NEO4J_URI or not NEO4J_USER or not NEO4J_PASSWORD:
+    raise RuntimeError("Missing Neo4j configuration. Set NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD in .env")
 
 def connect():
     print(f"[INFO] Connecting to Neo4j at {NEO4J_URI} as {NEO4J_USER}")

@@ -140,6 +140,13 @@ app.get('/aps/config', (_req, res) => {
 // 2-legged token endpoint (safe to call from your frontend; secrets stay server-side)
 app.get('/aps/token', async (_req, res, next) => {
   try {
+    if (!config.APS_CLIENT_ID || !config.APS_CLIENT_SECRET) {
+      return res.status(503).json({ 
+        error: 'APS credentials not configured', 
+        message: 'Please set APS_CLIENT_ID and APS_CLIENT_SECRET in backend/.env',
+        documentation: 'https://aps.autodesk.com/myapps'
+      });
+    }
     const token = await tokens.getTwoLeggedToken();
     res.setHeader('Cache-Control', 'no-store');
     res.json(token);
@@ -455,6 +462,14 @@ app.get('/urn/from-object-id', (req, res) => {
 
 app.post('/oss/upload', upload.single('file'), async (req, res, next) => {
   try {
+    if (!config.APS_CLIENT_ID || !config.APS_CLIENT_SECRET) {
+      return res.status(503).json({ 
+        error: 'APS credentials not configured', 
+        message: 'Please set APS_CLIENT_ID and APS_CLIENT_SECRET in backend/.env',
+        documentation: 'https://aps.autodesk.com/myapps'
+      });
+    }
+    
     const bucketKey = String(req.body.bucketKey || config.APS_BUCKET_KEY).trim();
     if (!req.file?.buffer) return res.status(400).json({ error: 'file is required (multipart field name: file)' });
 

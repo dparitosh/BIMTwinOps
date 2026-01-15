@@ -3,9 +3,12 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.env
 .venv/
 venv/
+
+# Environment files (contain secrets)
+.env
+!.env.example
 
 # OS
 .DS_Store

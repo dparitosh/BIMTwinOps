@@ -1,4 +1,12 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Load .env from parent backend folder (centralized config)
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+// Also try local .env as fallback
+dotenv.config();
 
 function splitList(value) {
   return String(value || '')

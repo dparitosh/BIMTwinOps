@@ -3,6 +3,19 @@ import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
+// Semantic segmentation color palette - shared across all viewers
+const SEMANTIC_COLORS = [
+  0xff5555, 0x55ff55, 0x5555ff, 0xffff55, 0xff55ff,
+  0x55ffff, 0xffffff, 0x999999, 0xff9955, 0x55ff99,
+  0x9955ff, 0x3333cc, 0x22aa88,
+];
+
+// Get color hex string for a label (for canvas rendering)
+export function getColorForLabel(label) {
+  const colorHex = SEMANTIC_COLORS[label % SEMANTIC_COLORS.length];
+  return '#' + colorHex.toString(16).padStart(6, '0');
+}
+
 /**
  PointCloudViewer
   - Uses your orientation mapping: posArray.push(x, z, -y)
@@ -55,7 +68,7 @@ export default function PointCloudViewer({
 
     // set initial size
     const w = mount.clientWidth || 800;
-    const h = height;
+    const h = mount.clientHeight || 600;
     renderer.setSize(w, h);
     mount.innerHTML = "";
     mount.appendChild(renderer.domElement);
@@ -98,7 +111,7 @@ export default function PointCloudViewer({
     const onResize = () => {
       if (!mount) return;
       const newW = mount.clientWidth || 800;
-      const newH = height;
+      const newH = mount.clientHeight || 600;
       renderer.setSize(newW, newH);
       camera.aspect = newW / newH;
       camera.updateProjectionMatrix();
@@ -134,7 +147,7 @@ export default function PointCloudViewer({
       pointsMeshRef.current = null;
       highlightPointRef.current = null;
     };
-  }, [height]);
+  }, []); // Remove height dependency
 
   // Update geometry when `data` changes
   useEffect(() => {
@@ -169,19 +182,14 @@ export default function PointCloudViewer({
       segmentMap[key].push(i);
     });
     segmentMapRef.current = segmentMap;
+    
+    console.log('[PointCloudViewer] Built segment map with keys:', Object.keys(segmentMap), 'for scene:', scene_id);
 
     // Geometry buffers
     const n = points.length;
     const posArray = new Float32Array(n * 3);
     const colorArray = new Float32Array(n * 3);
     const highlightArray = new Float32Array(n * 3); // initially zeros
-
-    // palette (same you used)
-    const COLORS = [
-      0xff5555, 0x55ff55, 0x5555ff, 0xffff55, 0xff55ff,
-      0x55ffff, 0xffffff, 0x999999, 0xff9955, 0x55ff99,
-      0x9955ff, 0x3333cc, 0x22aa88,
-    ];
 
     for (let i = 0; i < n; i++) {
       const p = points[i];
@@ -193,7 +201,7 @@ export default function PointCloudViewer({
       posArray[3 * i + 2] = -y;
 
       const lbl = labels[i] ?? 0;
-      const c = new THREE.Color(COLORS[lbl % COLORS.length]);
+      const c = new THREE.Color(SEMANTIC_COLORS[lbl % SEMANTIC_COLORS.length]);
       colorArray[3 * i] = c.r;
       colorArray[3 * i + 1] = c.g;
       colorArray[3 * i + 2] = c.b;
@@ -244,7 +252,9 @@ export default function PointCloudViewer({
 
       shader.fragmentShader = shader.fragmentShader.replace(
         "gl_FragColor = vec4( vColor, opacity );",
-        `vec3 finalColor = mix( vColor, vHighlightColor, 0.9 );
+        `// Only apply highlight if highlightColor is non-zero
+         float highlightIntensity = length(vHighlightColor);
+         vec3 finalColor = highlightIntensity > 0.1 ? vHighlightColor : vColor;
          gl_FragColor = vec4( finalColor, opacity );`
       );
     };
@@ -343,11 +353,13 @@ export default function PointCloudViewer({
       } catch (e) {}
       // keep scene/camera alive
     };
-  }, [data, onSegmentClick, height]);
+  }, [data]); // Only rebuild when data changes, not on every render
 
   // --- Robust: react to external selectedSegmentId prop ---
   useEffect(() => {
+    console.log('[PointCloudViewer] 🔵 useEffect triggered - selectedSegmentId:', selectedSegmentId);
     const pointsMesh = pointsMeshRef.current;
+    console.log('[PointCloudViewer] 🔵 pointsMesh exists:', !!pointsMesh);
 
     // helper: clear highlights
     const clearHighlights = () => {
@@ -406,21 +418,52 @@ export default function PointCloudViewer({
       return;
     }
 
+    console.log("[PointCloudViewer] Highlighting segment:", { 
+      selectedSegmentId, 
+      parsedLabel: selLabel,
+      segmentMapKeys: Object.keys(segmentMapRef.current || {})
+    });
+
     // At this point selLabel is the numeric label we want to highlight
     const geometry = pointsMesh.geometry;
     const labels = pointsMesh.userData.labels || [];
     const highlightAttr = geometry.getAttribute("highlightColor");
-    if (!highlightAttr) return;
+    if (!highlightAttr) {
+      console.warn("[PointCloudViewer] No highlightColor attribute found");
+      return;
+    }
 
     // zero out
     highlightAttr.array.fill(0);
 
-    // find indices
-    let indices = (segmentMapRef.current && segmentMapRef.current[selLabel]) || [];
+    // find indices - try both numeric and string keys
+    let indices = [];
+    const segMap = segmentMapRef.current || {};
+    
+    // Try numeric key first
+    if (segMap[selLabel]) {
+      indices = segMap[selLabel];
+    }
+    // Try string key
+    else if (segMap[String(selLabel)]) {
+      indices = segMap[String(selLabel)];
+    }
+    // Try all keys to find a match
+    else {
+      for (const key of Object.keys(segMap)) {
+        if (Number(key) === selLabel || key === String(selLabel)) {
+          indices = segMap[key];
+          break;
+        }
+      }
+    }
+
+    console.log("[PointCloudViewer] Found indices:", indices?.length || 0, "for label:", selLabel);
+
     if (indices.length === 0) {
-      // try string key
-      const alt = segmentMapRef.current && segmentMapRef.current[String(selLabel)];
-      if (alt && alt.length) indices = alt;
+      console.warn("[PointCloudViewer] No points found for label:", selLabel, "Available labels:", Object.keys(segMap));
+      clearHighlights();
+      return;
     }
 
     for (let k = 0; k < indices.length; k++) {
@@ -487,16 +530,252 @@ export default function PointCloudViewer({
       }
     }
 
-  }, [selectedSegmentId, autoFocusOnSelect]);
+  }, [selectedSegmentId, autoFocusOnSelect, data]); // Reapply highlights after data rebuild
+
+  // Zoom and camera controls
+  const handleZoomIn = () => {
+    if (controlsRef.current && cameraRef.current) {
+      const controls = controlsRef.current;
+      const camera = cameraRef.current;
+      const direction = new THREE.Vector3();
+      camera.getWorldDirection(direction);
+      const distance = camera.position.distanceTo(controls.target);
+      const moveAmount = distance * 0.2;
+      camera.position.add(direction.multiplyScalar(moveAmount));
+      controls.update();
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (controlsRef.current && cameraRef.current) {
+      const controls = controlsRef.current;
+      const camera = cameraRef.current;
+      const direction = new THREE.Vector3();
+      camera.getWorldDirection(direction);
+      const distance = camera.position.distanceTo(controls.target);
+      const moveAmount = distance * 0.2;
+      camera.position.sub(direction.multiplyScalar(moveAmount));
+      controls.update();
+    }
+  };
+
+  const handleResetView = () => {
+    if (cameraRef.current && controlsRef.current) {
+      const camera = cameraRef.current;
+      const controls = controlsRef.current;
+      camera.position.set(0, 0, cloudRadiusRef.current * 3);
+      controls.target.set(0, 0, 0);
+      controls.update();
+    }
+  };
+
+  const handleTopView = () => {
+    if (cameraRef.current && controlsRef.current) {
+      const camera = cameraRef.current;
+      const controls = controlsRef.current;
+      camera.position.set(0, cloudRadiusRef.current * 3, 0);
+      controls.target.set(0, 0, 0);
+      controls.update();
+    }
+  };
+
+  const handleFrontView = () => {
+    if (cameraRef.current && controlsRef.current) {
+      const camera = cameraRef.current;
+      const controls = controlsRef.current;
+      camera.position.set(0, 0, cloudRadiusRef.current * 3);
+      controls.target.set(0, 0, 0);
+      controls.update();
+    }
+  };
+
+  const handleSideView = () => {
+    if (cameraRef.current && controlsRef.current) {
+      const camera = cameraRef.current;
+      const controls = controlsRef.current;
+      camera.position.set(cloudRadiusRef.current * 3, 0, 0);
+      controls.target.set(0, 0, 0);
+      controls.update();
+    }
+  };
 
   return (
-    <div
-      ref={mountRef}
-      style={{
-        width: width,
-        height: typeof height === "number" ? `${height}px` : height,
-        overflow: "hidden",
-      }}
-    />
+    <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+      <div
+        ref={mountRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          overflow: "hidden",
+        }}
+      />
+      
+      {/* Corporate-Grade Viewer Controls */}
+      <div style={{
+        position: 'absolute',
+        top: '12px',
+        right: '12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '1px',
+        zIndex: 10,
+        background: 'white',
+        borderRadius: '8px',
+        border: '1px solid rgba(0, 118, 206, 0.2)',
+        boxShadow: '0 4px 12px rgba(0, 61, 121, 0.15)',
+        overflow: 'hidden'
+      }}>
+        {/* Zoom Controls */}
+        <button
+          onClick={handleZoomIn}
+          title="Zoom In"
+          style={{
+            width: '40px',
+            height: '40px',
+            border: 'none',
+            background: 'white',
+            color: 'var(--tcs-blue)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s',
+            borderBottom: '1px solid rgba(0, 118, 206, 0.1)'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--tcs-blue)'; e.currentTarget.style.color = 'white'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = 'var(--tcs-blue)'; }}
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+          </svg>
+        </button>
+
+        <button
+          onClick={handleZoomOut}
+          title="Zoom Out"
+          style={{
+            width: '40px',
+            height: '40px',
+            border: 'none',
+            background: 'white',
+            color: 'var(--tcs-blue)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s',
+            borderBottom: '1px solid rgba(0, 118, 206, 0.1)'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--tcs-blue)'; e.currentTarget.style.color = 'white'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = 'var(--tcs-blue)'; }}
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><line x1="8" y1="11" x2="14" y2="11"/>
+          </svg>
+        </button>
+
+        <button
+          onClick={handleResetView}
+          title="Reset View"
+          style={{
+            width: '40px',
+            height: '40px',
+            border: 'none',
+            background: 'white',
+            color: 'var(--tcs-blue)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s',
+            borderBottom: '1px solid rgba(0, 118, 206, 0.1)'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--tcs-blue)'; e.currentTarget.style.color = 'white'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = 'var(--tcs-blue)'; }}
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M3 12a9 9 0 1 0 18 0 9 9 0 1 0-18 0"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+        </button>
+
+        {/* Camera View Divider */}
+        <div style={{ height: '2px', background: 'rgba(0, 118, 206, 0.2)' }}></div>
+
+        {/* Camera Views */}
+        <button
+          onClick={handleTopView}
+          title="Top View (XZ Plane)"
+          style={{
+            width: '40px',
+            height: '40px',
+            border: 'none',
+            background: 'white',
+            color: 'var(--tcs-navy)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '10px',
+            fontWeight: '700',
+            letterSpacing: '0.5px',
+            transition: 'all 0.2s',
+            borderBottom: '1px solid rgba(0, 118, 206, 0.1)'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--tcs-orange)'; e.currentTarget.style.color = 'white'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = 'var(--tcs-navy)'; }}
+        >
+          TOP
+        </button>
+
+        <button
+          onClick={handleFrontView}
+          title="Front View (XY Plane)"
+          style={{
+            width: '40px',
+            height: '40px',
+            border: 'none',
+            background: 'white',
+            color: 'var(--tcs-navy)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '9px',
+            fontWeight: '700',
+            letterSpacing: '0.3px',
+            transition: 'all 0.2s',
+            borderBottom: '1px solid rgba(0, 118, 206, 0.1)'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--tcs-orange)'; e.currentTarget.style.color = 'white'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = 'var(--tcs-navy)'; }}
+        >
+          FRONT
+        </button>
+
+        <button
+          onClick={handleSideView}
+          title="Side View (YZ Plane)"
+          style={{
+            width: '40px',
+            height: '40px',
+            border: 'none',
+            background: 'white',
+            color: 'var(--tcs-navy)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '10px',
+            fontWeight: '700',
+            letterSpacing: '0.5px',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--tcs-orange)'; e.currentTarget.style.color = 'white'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = 'var(--tcs-navy)'; }}
+        >
+          SIDE
+        </button>
+      </div>
+    </div>
   );
 }

@@ -66,8 +66,19 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ensure minimum readable font sizes */
+* {
+  min-font-size: 13px;
+}
+
+small, .text-xs {
+  font-size: 13px !important;
 }
 
 /* TCS Glass Card Style */
@@ -80,6 +91,28 @@ body {
 
 .glass:hover {
   box-shadow: var(--shadow-md);
+}
+
+/* Focus states for accessibility */
+*:focus-visible {
+  outline: 2px solid var(--tcs-blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--tcs-blue);
+  outline-offset: 2px;
+}
+
+/* Selection states with enhanced visibility */
+.selected {
+  border: 2px solid var(--tcs-orange);
+  box-shadow: 0 0 0 4px rgba(255, 102, 0, 0.2);
 }
 
 /* TCS Button Styles */
@@ -95,6 +128,16 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   border: none;
+}
+
+.tcs-btn:focus-visible {
+  outline: 2px solid var(--tcs-blue);
+  outline-offset: 2px;
+}
+
+.tcs-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .tcs-btn-primary {
@@ -187,6 +230,68 @@ body {
   border-radius: 12px;
   margin-bottom: 20px;
   box-shadow: var(--shadow-md);
+}
+
+/* Responsive Design Breakpoints */
+@media (max-width: 1400px) {
+  .w-80 {
+    width: 280px !important;
+  }
+  .w-96 {
+    width: 320px !important;
+  }
+  .w-64 {
+    width: 220px !important;
+  }
+  .w-72 {
+    width: 260px !important;
+  }
+}
+
+@media (max-width: 1200px) {
+  .glass {
+    padding: 12px !important;
+  }
+  
+  body {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 1024px) {
+  /* Stack panels vertically on smaller screens */
+  .flex-col-mobile {
+    flex-direction: column !important;
+  }
+  
+  .w-80, .w-96, .w-64, .w-72 {
+    width: 100% !important;
+    min-width: auto !important;
+    max-width: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .tcs-header h1 {
+    font-size: 18px !important;
+  }
+  
+  .tcs-btn {
+    padding: 8px 16px !important;
+    font-size: 13px !important;
+  }
+}
+
+/* Smooth transitions for layout changes */
+* {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Skip transition on width/height for performance */
+.no-transition {
+  transition: none !important;
 }
 
 /* TCS Badge */
