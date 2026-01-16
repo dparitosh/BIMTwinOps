@@ -130,12 +130,12 @@ function Wait-ForEndpoint($url, $timeoutSec = 30, $description = "endpoint") {
 
 function Stop-ExistingProcess($name, $pidFile) {
   if (Test-Path $pidFile) {
-    $pid = Get-Content $pidFile -ErrorAction SilentlyContinue
-    if ($pid) {
-      $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+    $processId = Get-Content $pidFile -ErrorAction SilentlyContinue
+    if ($processId) {
+      $proc = Get-Process -Id $processId -ErrorAction SilentlyContinue
       if ($proc) {
-        Write-Info "Stopping existing $name (PID: $pid)..."
-        Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+        Write-Info "Stopping existing $name (PID: $processId)..."
+        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 500
       }
     }
