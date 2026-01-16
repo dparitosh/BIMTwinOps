@@ -14,6 +14,30 @@ function Write-Step([string]$msg) {
   }
 }
 
+function Test-TcpPortInUse([int]$port) {
+  try {
+    $c = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+    return ($null -ne $c)
+  } catch {
+    # On older/limited environments, Get-NetTCPConnection might fail.
+    return $false
+  }
+}
+
+function Find-FreeTcpPort(
+  [int[]]$PreferredPorts,
+  [int]$RangeStart,
+  [int]$RangeEnd
+) {
+  foreach ($p in ($PreferredPorts | Where-Object { $_ -gt 0 })) {
+    if (-not (Test-TcpPortInUse -port $p)) { return $p }
+  }
+  for ($p = $RangeStart; $p -le $RangeEnd; $p++) {
+    if (-not (Test-TcpPortInUse -port $p)) { return $p }
+  }
+  return $null
+}
+
 function Parse-EnvFile([string]$path) {
   $map = @{}
   if (-not (Test-Path $path)) { return $map }
@@ -31,7 +55,7 @@ function Parse-EnvFile([string]$path) {
     $key = $t.Substring(0, $idx).Trim()
     $value = $t.Substring($idx + 1)
 
-    if ($value -ne $null) {
+    if ($null -ne $value) {
       $value = $value.Trim()
       # Strip surrounding quotes if present
       if ($value.Length -ge 2) {
@@ -114,7 +138,7 @@ function Prompt-EnvValue(
   $prompt = "$label ($key) - example: $example$suffix"
   $input = Read-Host $prompt
 
-  if (($input -eq $null) -or ($input.Trim() -eq '')) {
+  if (($null -eq $input) -or ($input.Trim() -eq '')) {
     if ($effectiveDefault -ne $null) { return $effectiveDefault }
     return ''
   }
@@ -150,7 +174,6 @@ $apsEnvPath = Join-Path $repoRoot 'backend\aps-service\.env'
 $frontendEnvPath = Join-Path $repoRoot 'pointcloud-frontend\.env'
 
 $existingBackend = Parse-EnvFile $backendEnvPath
-$existingAps = Parse-EnvFile $apsEnvPath
 $existingFrontend = Parse-EnvFile $frontendEnvPath
 
 Write-Step 'Backend (FastAPI / Knowledge Graph)'
@@ -161,7 +184,9 @@ $NEO4J_PASSWORD = Prompt-EnvValue $existingBackend 'NEO4J_PASSWORD' 'Neo4j passw
 $NEO4J_DATABASE = Prompt-EnvValue $existingBackend 'NEO4J_DATABASE' 'Neo4j database' 'smartbim' 'smartbim'
 
 $BACKEND_HOST = Prompt-EnvValue $existingBackend 'BACKEND_HOST' 'Backend host (bind)' '127.0.0.1' '127.0.0.1' -Optional
-$BACKEND_PORT = Prompt-EnvValue $existingBackend 'BACKEND_PORT' 'Backend port' '8000' '8000' -Optional
+$defaultBackendPort = Find-FreeTcpPort -PreferredPorts @(8001, 8000) -RangeStart 8000 -RangeEnd 8010
+if (-not $defaultBackendPort) { $defaultBackendPort = 8000 }
+$BACKEND_PORT = Prompt-EnvValue $existingBackend 'BACKEND_PORT' 'Backend port' '8000' ([string]$defaultBackendPort) -Optional
 
 $LLM_PROVIDER = Prompt-EnvValue $existingBackend 'LLM_PROVIDER' 'LLM provider (ollama|gemini|azure)' 'ollama' 'ollama' -Optional
 
@@ -178,7 +203,9 @@ $AZURE_OPENAI_DEPLOYMENT = Prompt-EnvValue $existingBackend 'AZURE_OPENAI_DEPLOY
 $AZURE_OPENAI_API_VERSION = Prompt-EnvValue $existingBackend 'AZURE_OPENAI_API_VERSION' 'Azure OpenAI API version' '2024-08-01-preview' '2024-08-01-preview' -Optional
 
 Write-Step 'APS (Autodesk Platform Services)'
-$APS_SERVICE_PORT = Prompt-EnvValue $existingBackend 'APS_SERVICE_PORT' 'APS service port' '3001' '3001' -Optional
+$defaultApsPort = Find-FreeTcpPort -PreferredPorts @(3001) -RangeStart 3001 -RangeEnd 3010
+if (-not $defaultApsPort) { $defaultApsPort = 3001 }
+$APS_SERVICE_PORT = Prompt-EnvValue $existingBackend 'APS_SERVICE_PORT' 'APS service port' '3001' ([string]$defaultApsPort) -Optional
 $APS_CLIENT_ID = Prompt-EnvValue $existingBackend 'APS_CLIENT_ID' 'APS Client ID' '<your-aps-client-id>' '' -Optional
 $APS_CLIENT_SECRET = Prompt-EnvValue $existingBackend 'APS_CLIENT_SECRET' 'APS Client Secret' '<your-aps-client-secret>' '' -Secret -Optional
 $APS_CALLBACK_URL = Prompt-EnvValue $existingBackend 'APS_CALLBACK_URL' 'APS OAuth callback URL (3-legged)' 'http://127.0.0.1:3001/aps/oauth/callback' "http://127.0.0.1:$APS_SERVICE_PORT/aps/oauth/callback" -Optional

@@ -89,6 +89,37 @@ You can later install it with:
 
 ## Troubleshooting
 
+### Port conflicts (ERR_CONNECTION_REFUSED / WinError 10048)
+
+If you see errors like:
+
+- Browser: `net::ERR_CONNECTION_REFUSED` (frontend can’t reach the API)
+- API log: `WinError 10048` / “error while attempting to bind … only one usage of each socket address”
+
+…then the configured port is already used by another process.
+
+What to do:
+
+1) Re-run the wizard (it will suggest a free port by default):
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\configure.ps1`
+2) Restart services:
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\stop-services.ps1 -All -Force`
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\start-services.ps1 -All`
+
+Important: the Vite frontend reads `VITE_*` variables at startup, so **you must restart the frontend** after changing `pointcloud-frontend\.env`.
+
+### PointNet weights missing (upload returns 500)
+
+PointNet’s Python dependencies can be installed, but the trained weights file is not always present:
+
+- Expected path: `backend\pointnet_s3dis\best_pointnet_s3dis.pth`
+
+If the weights are missing:
+
+- The API will still accept uploads, but segmentation may run in a **fallback** mode (single segment) so you can continue using the viewer.
+
+To enable real semantic segmentation, place the weights file at the expected path.
+
 ### “Python not found” / “npm not found”
 
 - Install prerequisites:

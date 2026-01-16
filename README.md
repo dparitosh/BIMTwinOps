@@ -144,6 +144,12 @@ Run from repo root:
 
 Docs: see `docs/WINDOWS_AUTO_INSTALL.md`.
 
+Notes:
+
+- If a port is already in use (common on dev machines), re-run `scripts/configure.ps1` to pick a free port and restart services.
+- The Vite frontend reads `VITE_*` variables at startup, so restart the frontend after changing `pointcloud-frontend/.env`.
+- PointNet model weights are not always bundled; when missing, point cloud upload can run in a fallback mode.
+
 ### Start/Stop everything on Windows (recommended)
 
 This repo includes convenience scripts that start the dev services in the background and track their PIDs/logs in a local `.pids/` folder.

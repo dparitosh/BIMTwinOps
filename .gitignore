@@ -54,3 +54,6 @@ __pycache__/
 
 # Logs
 *.log
+
+# Local dev service PID/log directory (created by scripts/start-services.ps1)
+.pids/

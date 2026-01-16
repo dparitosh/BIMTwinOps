@@ -85,6 +85,7 @@ if (-not $SkipPython) {
 
   # PointNet deps are optional but commonly needed for point cloud segmentation
   $pointnetReq = Join-Path $repoRoot 'backend\pointnet_s3dis\requirements.txt'
+  $pointnetWeights = Join-Path $repoRoot 'backend\pointnet_s3dis\best_pointnet_s3dis.pth'
   if ($SkipPointNet) {
     Write-Host "Skipping PointNet deps (SkipPointNet set)"
   } elseif (Test-Path $pointnetReq) {
@@ -92,6 +93,11 @@ if (-not $SkipPython) {
     & $venvPython -m pip install -r $pointnetReq
   } else {
     Write-Host "Skipping PointNet deps (requirements not found at $pointnetReq)"
+  }
+
+  if (-not (Test-Path $pointnetWeights)) {
+    Write-Host "Note: PointNet weights not found at $pointnetWeights" -ForegroundColor Yellow
+    Write-Host "      Point cloud uploads may run in fallback mode until weights are added." -ForegroundColor Yellow
   }
 }
 

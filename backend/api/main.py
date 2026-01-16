@@ -177,7 +177,43 @@ async def upload_pointcloud(file: UploadFile = File(...)):
             )
     
     scene_id = os.path.splitext(file.filename)[0]
-    return process_uploaded_array(np_array, scene_id=scene_id)
+    try:
+        return process_uploaded_array(np_array, scene_id=scene_id)
+    except FileNotFoundError as e:
+        # PointNet weights are not always present in lightweight installs.
+        # Fall back to a minimal response so the UI can still render the point cloud.
+        logger.warning("PointNet weights not found; using fallback segmentation: %s", e)
+
+        xyz = np_array
+        if isinstance(xyz, np.ndarray) and xyz.ndim == 2 and xyz.shape[1] >= 3:
+            xyz = xyz[:, :3]
+        else:
+            raise HTTPException(status_code=400, detail=f"Invalid point cloud array shape: {getattr(np_array, 'shape', None)}")
+
+        labels = np.full((xyz.shape[0],), 12, dtype=np.int64)  # 'clutter'
+        centroid = xyz.mean(axis=0)
+        mins = xyz.min(axis=0)
+        maxs = xyz.max(axis=0)
+
+        segments = [{
+            "segment_key": 12,
+            "semantic_id": 12,
+            "semantic_name": "clutter",
+            "centroid": centroid.tolist(),
+            "bbox_min": mins.tolist(),
+            "bbox_max": maxs.tolist(),
+            "num_points": int(xyz.shape[0]),
+        }]
+
+        return {
+            "scene_id": scene_id,
+            "points": xyz.astype(float).tolist(),
+            "labels": labels.tolist(),
+            "segments": segments,
+            "edges": [],
+            "segmentation": "fallback",
+            "warning": str(e),
+        }
 
 def extract_cypher_from_text(text: str) -> (str, str):
     m = CODEBLOCK_RE.search(text or "")

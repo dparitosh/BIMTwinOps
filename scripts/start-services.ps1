@@ -2,7 +2,8 @@ param(
   [switch]$Aps,
   [switch]$Frontend,
   [switch]$Api,
-  [switch]$All
+  [switch]$All,
+  [switch]$Dev
 )
 
 $ErrorActionPreference = 'Stop'
@@ -94,6 +95,24 @@ function Start-TrackedProcess(
 
   Set-Content -Path $pidFile -Value $proc.Id -Encoding ascii
   Write-Host "[$name] started (pid=$($proc.Id))"
+
+  # Give the process a moment to bind ports / initialize.
+  Start-Sleep -Milliseconds 600
+  if (-not (Test-ProcessRunning -processId $proc.Id)) {
+    Write-Host "[$name] failed to stay running (pid=$($proc.Id)). Check logs:" -ForegroundColor Yellow
+    if (Test-Path $stderrLogFile) {
+      try {
+        $tail = Get-Content -LiteralPath $stderrLogFile -Tail 30 -ErrorAction SilentlyContinue
+        if ($tail) {
+          Write-Host ("--- {0} (last 30 lines) ---" -f (Split-Path -Leaf $stderrLogFile)) -ForegroundColor Yellow
+          $tail | ForEach-Object { Write-Host $_ }
+        }
+      } catch {
+        # ignore
+      }
+    }
+    Remove-Item -Force $pidFile -ErrorAction SilentlyContinue
+  }
 }
 
 $startAps = $All -or (-not ($Aps -or $Frontend -or $Api)) -or $Aps
@@ -111,6 +130,11 @@ if ($startAps) {
 if ($startApi) {
   # Load .env to get BACKEND_PORT
   $envPath = Join-Path $repoRoot 'backend\.env'
+  $backendHost = '127.0.0.1'
+  $hostValue = Get-EnvValueFromFile -path $envPath -key 'BACKEND_HOST'
+  if ($hostValue) {
+    $backendHost = $hostValue
+  }
   $backendPort = '8000'
   $portValue = Get-EnvValueFromFile -path $envPath -key 'BACKEND_PORT'
   if ($portValue -and ($portValue -match '^\d+$')) {
@@ -119,7 +143,11 @@ if ($startApi) {
   # Prefer workspace venv Python if present.
   $venvPython = Join-Path $repoRoot '.venv\Scripts\python.exe'
   $pythonExe = if (Test-Path $venvPython) { '"' + $venvPython + '"' } else { 'python' }
-  Start-TrackedProcess -name 'api' -workingDir (Join-Path $repoRoot 'backend') -command "$pythonExe -m uvicorn api.main:app --host 127.0.0.1 --port $backendPort --reload"
+
+  # NOTE: Uvicorn --reload can be unstable when started as a background process with redirected stdio,
+  # and it also breaks PID tracking (it spawns child processes). Default to non-reload mode for stability.
+  $reloadFlag = if ($Dev) { ' --reload' } else { '' }
+  Start-TrackedProcess -name 'api' -workingDir (Join-Path $repoRoot 'backend') -command "$pythonExe -m uvicorn api.main:app --host $backendHost --port $backendPort$reloadFlag"
 }
 
 Write-Host "Logs + PIDs in: $pidDir"
