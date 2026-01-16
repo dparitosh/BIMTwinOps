@@ -203,7 +203,12 @@ $backendReq = Join-Path $repoRoot 'backend\api\requirements.txt'
 if (Test-Path $backendReq) {
   Write-Info "Installing backend/api dependencies..."
   Write-Info "Running: pip install -r $backendReq"
-  & $venvPython -m pip install -r $backendReq 2>&1 | ForEach-Object { Write-Host "  $_" }
+  $pipOutput = & $venvPython -m pip install -r $backendReq 2>&1
+  $pipOutput | ForEach-Object { Write-Host "  $_" }
+  if ($LASTEXITCODE -ne 0) {
+    Write-Fail "pip install failed! Check errors above."
+    exit 1
+  }
   Write-Success "Backend dependencies installed"
 } else {
   Write-Fail "Backend requirements.txt not found at: $backendReq"
@@ -217,8 +222,13 @@ if ($SkipPointNet) {
 } elseif (Test-Path $pointnetReq) {
   Write-Info "Installing PointNet dependencies..."
   Write-Info "Running: pip install -r $pointnetReq"
-  & $venvPython -m pip install -r $pointnetReq 2>&1 | ForEach-Object { Write-Host "  $_" }
-  Write-Success "PointNet dependencies installed"
+  $pipOutput = & $venvPython -m pip install -r $pointnetReq 2>&1
+  $pipOutput | ForEach-Object { Write-Host "  $_" }
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warn "PointNet pip install had errors (non-critical)"
+  } else {
+    Write-Success "PointNet dependencies installed"
+  }
 } else {
   Write-Warn "PointNet requirements.txt not found (submodule may not be initialized)"
 }
@@ -300,11 +310,13 @@ $validationPassed = $true
 Write-Info "Testing Python imports..."
 $imports = @('fastapi', 'uvicorn', 'numpy', 'neo4j')
 foreach ($mod in $imports) {
-  $result = & $venvPython -c "import $mod; print(f'$mod {getattr($mod, \"__version__\", \"OK\")}')" 2>&1
+  $pyCode = "import $mod; print('$mod OK')"
+  $result = & $venvPython -c $pyCode 2>&1
   if ($LASTEXITCODE -eq 0) {
     Write-Success "  $result"
   } else {
     Write-Fail "  Cannot import $mod"
+    Write-Host "    Error: $result" -ForegroundColor DarkRed
     $validationPassed = $false
   }
 }

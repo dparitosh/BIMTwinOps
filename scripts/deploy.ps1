@@ -198,8 +198,28 @@ if (Test-Path $venvPython) {
   Write-Success "Python venv: $pyVer"
 } else {
   Write-Fail "Python venv not found at: $venvPython"
-  Write-Host "  Run .\scripts\setup.ps1 first!" -ForegroundColor White
-  exit 1
+  Write-Host ""
+  Write-Host "Setup has not been run yet. Running setup.ps1 now..." -ForegroundColor Yellow
+  Write-Host ""
+  
+  $setupScript = Join-Path $scriptDir 'setup.ps1'
+  if (Test-Path $setupScript) {
+    & $setupScript
+    if ($LASTEXITCODE -ne 0) {
+      Write-Fail "Setup failed! Check errors above."
+      exit 1
+    }
+    # Re-check venv after setup
+    if (-not (Test-Path $venvPython)) {
+      Write-Fail "Setup completed but venv still not found!"
+      exit 1
+    }
+    $pyVer = & $venvPython --version 2>&1
+    Write-Success "Python venv ready: $pyVer"
+  } else {
+    Write-Fail "setup.ps1 not found at: $setupScript"
+    exit 1
+  }
 }
 
 # Check .env files

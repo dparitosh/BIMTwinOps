@@ -1,0 +1,37 @@
+# BIMTwinOps Backend API Requirements
+
+# FastAPI framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+
+# Data processing
+numpy>=1.21.0
+python-multipart>=0.0.12
+
+# Neo4j driver for knowledge graph
+neo4j>=5.25.0
+
+# Environment variables
+python-dotenv>=1.0.1
+
+# HTTP client for bSDD API and external services
+requests>=2.32.3
+
+# Pydantic for data validation
+pydantic>=2.9.2
+
+# OpenAI SDK (used for Azure OpenAI GenAI integration)
+openai>=1.54.3
+
+# GraphQL API
+strawberry-graphql[fastapi]>=0.246.0
+
+# MCP (Model Context Protocol) and Agentic Architecture
+mcp>=1.0.0                          # MCP Python SDK for tool integration
+langgraph>=0.2.0                    # LangGraph for agent orchestration
+langchain>=0.3.0                    # LangChain for agent foundations
+opensearch-py>=2.4.0                # OpenSearch for hybrid semantic search
+redis>=5.0.0                        # Redis for LangGraph state persistence
+# basex-client - BaseX uses REST/HTTP API, no pip package needed
+
+# Note: PyTorch and PointNet dependencies are in pointnet_s3dis/requirements.txt
