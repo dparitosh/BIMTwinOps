@@ -158,10 +158,10 @@ if ($pointnetFiles.Count -gt 2) {
 # ============================================================================
 Write-Step "Creating Python Virtual Environment"
 
-# Use explicit path construction to avoid Join-Path issues with dotfiles
-$venvPath = "$repoRoot\.venv"
-$venvPython = "$venvPath\Scripts\python.exe"
-$venvPip = "$venvPath\Scripts\pip.exe"
+# Use [IO.Path]::Combine for reliable path construction in PS 5.1
+$venvPath = [IO.Path]::Combine($repoRoot, '.venv')
+$venvPython = [IO.Path]::Combine($venvPath, 'Scripts', 'python.exe')
+$venvPip = [IO.Path]::Combine($venvPath, 'Scripts', 'pip.exe')
 
 Write-Info "Venv path: $venvPath"
 
