@@ -65,7 +65,10 @@ export default function AnnotationPanel({ selected, sceneData, onSegmentSelect }
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flexShrink: 0 }} className="flex items-center justify-between mb-3 pb-3" style={{ borderBottom: '2px solid var(--border-light)' }}>
+      <div
+        className="flex items-center justify-between mb-3 pb-3"
+        style={{ flexShrink: 0, borderBottom: '2px solid var(--border-light)' }}
+      >
         <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Scene Hierarchy</h3>
         {sceneData?.segments && (
           <span className="px-2 py-1 rounded" style={{ background: 'var(--tcs-blue)', color: 'white', fontSize: '12px', fontWeight: 600 }}>

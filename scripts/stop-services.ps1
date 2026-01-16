@@ -69,7 +69,19 @@ if ($stopAps) {
 
 if ($stopApi) {
   Stop-ByPidFile 'api'
-  Stop-ByPort 'api' 8000
+  $envPath = Join-Path $repoRoot 'backend\.env'
+  $backendPort = 8000
+  if (Test-Path $envPath) {
+    $envContent = Get-Content $envPath
+    $portLine = $envContent | Where-Object { $_ -match '^BACKEND_PORT\s*=\s*(.+)' }
+    if ($portLine) {
+      $backendPortText = $Matches[1].Trim()
+      if ($backendPortText -match '^\d+$') {
+        $backendPort = [int]$backendPortText
+      }
+    }
+  }
+  Stop-ByPort 'api' $backendPort
 }
 
 Write-Host "Done"

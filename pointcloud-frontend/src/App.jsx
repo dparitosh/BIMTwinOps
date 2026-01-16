@@ -9,6 +9,7 @@ import AccBrowser from "./components/AccBrowser";
 import OssUploadTranslate from "./components/OssUploadTranslate";
 import ApsViewer from "./components/ApsViewer";
 import ApsViewerExtended, { AVAILABLE_EXTENSIONS } from "./components/ApsViewerExtended";
+import AgentInterface from "./components/AgentInterface";
 // Enterprise Pages
 import EnterpriseDashboard from "./components/EnterpriseDashboard";
 import ProjectScheduling from "./components/ProjectScheduling";
@@ -35,6 +36,7 @@ const BACKEND_API_URL =
 
 // Tab options for the main viewer area
 const VIEWER_TABS = [
+  { id: "agent", label: "AI Assistant", icon: "M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" },
   { id: "bim", label: "BIM Viewer", icon: "M2 20h20M4 20V8l4-4v6l4-4v6l4-4v8M8 20v-4h4v4M18 20V10h3v10" },
   { id: "scheduling", label: "Scheduling", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
   { id: "analytics", label: "Analytics", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
@@ -59,7 +61,7 @@ export default function App() {
   const [viewerAuth, setViewerAuth] = useState("app");
 
   // Active viewer tab
-  const [activeTab, setActiveTab] = useState("bim");
+  const [activeTab, setActiveTab] = useState("agent");
 
   // Chat UI state
   const [chatOpen, setChatOpen] = useState(false);
@@ -177,8 +179,8 @@ export default function App() {
               </svg>
             </div>
             <div>
-              <h1 className="text-xl font-bold">SMART BIM</h1>
-              <p className="text-xs opacity-75">APS + PointCloud Digital Twin Platform</p>
+              <h1 className="text-xl font-bold">BIMTwinOps</h1>
+              <p className="text-xs opacity-75">Enterprise Digital Twin Operations Platform</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -236,6 +238,10 @@ export default function App() {
 
       {/* Main Viewer Panel */}
       <div className="glass p-4" style={{ minHeight: "75vh" }}>
+        {activeTab === "agent" && (
+          <AgentInterface />
+        )}
+
         {activeTab === "bim" && (
           <UnifiedBimViewer
             apsBaseUrl={APS_API_URL}
@@ -1168,7 +1174,7 @@ function PointCloudPanel({ sceneData, selected, loading, onUpload, onPointClick,
                     edges={sceneData.edges}
                     onNodeClick={onGraphClick}
                     selectedSegmentId={selected?.segmentId ?? null}
-                    uniformRadius={14}
+                    uniformRadius={10}
                     onNodeHover={(node) => setHoveredNode(node)}
                   />
                 </div>

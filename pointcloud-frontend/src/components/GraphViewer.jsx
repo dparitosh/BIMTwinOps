@@ -12,7 +12,8 @@ import { getColorForLabel } from "./PointCloudViewer";
   - edges (optional) - if provided will be used instead of generated links
   - onNodeClick(nodeId)
   - selectedSegmentId
-  - uniformRadius (px) default 12
+    - uniformRadius (px) default 10
+    - backgroundColor (css color) default "#eaf2ff" (light blue hue)
   - connectMode: "complete" | "knn" (default "complete")
   - knn: integer when connectMode="knn" (default 3)
 */
@@ -64,7 +65,8 @@ export default function GraphViewer({
   onNodeClick = () => {},
   onNodeHover = () => {},
   selectedSegmentId = null,
-  uniformRadius = 12,
+  uniformRadius = 10,
+  backgroundColor = "#eaf2ff",
   connectMode = "complete", // "complete" or "knn"
   knn = 3,
 }) {
@@ -209,9 +211,9 @@ export default function GraphViewer({
           graphData={graphData}
           width={dimensions.width}
           height={dimensions.height}
-          backgroundColor="#f8fafc"
+          backgroundColor={backgroundColor}
           nodeLabel={(node) => `${node.label} — ${node.num_points ?? 0} pts`}
-          linkColor={() => "#cbd5e1"}
+          linkColor={() => "rgba(30, 64, 175, 0.22)"}
           linkWidth={1}
           onNodeClick={(node) => onNodeClick?.(node.id)}
           onNodeHover={(node) => {
@@ -227,7 +229,7 @@ export default function GraphViewer({
             }
           }}
           nodeCanvasObject={(node, ctx, globalScale) => {
-            const r = node.id === selectedSegmentId ? uniformRadius * 1.8 : uniformRadius;
+            const r = node.id === selectedSegmentId ? uniformRadius * 1.6 : uniformRadius;
             ctx.beginPath();
             ctx.arc(node.x, node.y, r, 0, 2 * Math.PI, false);
             
@@ -245,16 +247,21 @@ export default function GraphViewer({
               ctx.stroke();
             }
 
-            // draw label with white text for better contrast on colored nodes
+            // draw label (stroke + fill) for readability on a blue-hue background
             const fontSize = Math.max(10, 12 / Math.max(globalScale, 0.4));
             ctx.font = `${fontSize}px Sans-Serif`;
-            ctx.fillStyle = "white";
-            ctx.fillText(node.label, node.x + r + 6, node.y + fontSize/2 - 2);
+            const tx = node.x + r + 6;
+            const ty = node.y + fontSize / 2 - 2;
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
+            ctx.strokeText(node.label, tx, ty);
+            ctx.fillStyle = "rgba(15, 23, 42, 0.95)"; // slate-900-ish
+            ctx.fillText(node.label, tx, ty);
           }}
           nodePointerAreaPaint={(node, color, ctx) => {
             ctx.fillStyle = color;
             ctx.beginPath();
-            ctx.arc(node.x, node.y, uniformRadius + 6, 0, Math.PI * 2);
+            ctx.arc(node.x, node.y, uniformRadius + 5, 0, Math.PI * 2);
             ctx.fill();
           }}
         />

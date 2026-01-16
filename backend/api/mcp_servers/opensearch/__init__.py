@@ -1,0 +1,1 @@
+"""OpenSearch MCP server package."""

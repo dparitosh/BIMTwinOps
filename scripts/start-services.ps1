@@ -99,8 +99,10 @@ if ($startApi) {
       $backendPort = $Matches[1].Trim()
     }
   }
-  # Requires python + uvicorn installed in your environment.
-  Start-TrackedProcess -name 'api' -workingDir (Join-Path $repoRoot 'backend') -command "python -m uvicorn api.main:app --host 127.0.0.1 --port $backendPort --reload"
+  # Prefer workspace venv Python if present.
+  $venvPython = Join-Path $repoRoot '.venv\Scripts\python.exe'
+  $pythonExe = if (Test-Path $venvPython) { '"' + $venvPython + '"' } else { 'python' }
+  Start-TrackedProcess -name 'api' -workingDir (Join-Path $repoRoot 'backend') -command "$pythonExe -m uvicorn api.main:app --host 127.0.0.1 --port $backendPort --reload"
 }
 
 Write-Host "Logs + PIDs in: $pidDir"

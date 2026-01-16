@@ -19,7 +19,7 @@ export function getColorForLabel(label) {
 /**
  PointCloudViewer
   - Uses your orientation mapping: posArray.push(x, z, -y)
-  - Double-click selects entire segment and also highlights the exact point (pulsing sphere)
+    - Click selects entire segment and also highlights the exact point (pulsing sphere)
   - Reacts to external `selectedSegmentId` prop to highlight segments clicked in GraphViewer
   - Scene/camera/controls/renderer created once; geometry replaced on data updates
 
@@ -286,8 +286,8 @@ export default function PointCloudViewer({
     raycaster.params.Points.threshold = radius * 0.01;
     const mouse = new THREE.Vector2();
 
-    // selection handler — double click to avoid conflicts with drag
-    const onDoubleClick = (ev) => {
+    // Selection handler — single click, but guarded so OrbitControls drags don't trigger selection
+    const pickFromPointerEvent = (ev) => {
       if (!pointsMeshRef.current) return;
       const canvasRect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((ev.clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
@@ -344,12 +344,54 @@ export default function PointCloudViewer({
       onSegmentClick?.({ pointIndex: idx, label: lbl, segmentId, sceneId: scene_id });
     };
 
-    renderer.domElement.addEventListener("dblclick", onDoubleClick);
+    // Track pointer movement to distinguish click from drag
+    const DRAG_THRESHOLD_PX = 6;
+    const CLICK_MAX_MS = 450;
+    let pointerDown = null;
+
+    const onPointerDown = (ev) => {
+      // left-button only
+      if (typeof ev.button === 'number' && ev.button !== 0) return;
+      pointerDown = {
+        x: ev.clientX,
+        y: ev.clientY,
+        t: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
+        moved: false,
+      };
+    };
+
+    const onPointerMove = (ev) => {
+      if (!pointerDown) return;
+      const dx = ev.clientX - pointerDown.x;
+      const dy = ev.clientY - pointerDown.y;
+      if ((dx * dx + dy * dy) >= (DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX)) {
+        pointerDown.moved = true;
+      }
+    };
+
+    const onPointerUp = (ev) => {
+      if (!pointerDown) return;
+      const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      const elapsed = now - pointerDown.t;
+      const moved = pointerDown.moved;
+      pointerDown = null;
+
+      // Ignore if it was a drag (OrbitControls), or a long press.
+      if (moved || elapsed > CLICK_MAX_MS) return;
+
+      pickFromPointerEvent(ev);
+    };
+
+    renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    renderer.domElement.addEventListener("pointermove", onPointerMove);
+    renderer.domElement.addEventListener("pointerup", onPointerUp);
 
     // cleanup when data changes
     return () => {
       try {
-        renderer.domElement.removeEventListener("dblclick", onDoubleClick);
+        renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+        renderer.domElement.removeEventListener("pointermove", onPointerMove);
+        renderer.domElement.removeEventListener("pointerup", onPointerUp);
       } catch (e) {}
       // keep scene/camera alive
     };
@@ -460,8 +502,33 @@ export default function PointCloudViewer({
 
     console.log("[PointCloudViewer] Found indices:", indices?.length || 0, "for label:", selLabel);
 
+    // Fallback: if segmentMap lookup failed for any reason, scan the labels array.
+    // This is slower (O(N)) but extremely reliable and only runs on selection.
     if (indices.length === 0) {
-      console.warn("[PointCloudViewer] No points found for label:", selLabel, "Available labels:", Object.keys(segMap));
+      const lbls = Array.isArray(pointsMesh.userData.labels) ? pointsMesh.userData.labels : [];
+      if (lbls.length) {
+        const scanned = [];
+        for (let i = 0; i < lbls.length; i++) {
+          const v = Number(lbls[i]);
+          if (!Number.isNaN(v) && v === selLabel) scanned.push(i);
+        }
+        if (scanned.length) {
+          indices = scanned;
+          console.warn(
+            "[PointCloudViewer] segmentMap lookup returned 0 indices; recovered by scanning labels.",
+            { selLabel, scanned: scanned.length }
+          );
+        }
+      }
+    }
+
+    if (indices.length === 0) {
+      console.warn(
+        "[PointCloudViewer] No points found for label:",
+        selLabel,
+        "Available labels:",
+        Object.keys(segMap)
+      );
       clearHighlights();
       return;
     }

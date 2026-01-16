@@ -2,6 +2,7 @@ import os
 import io
 import re
 import json
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -15,11 +16,26 @@ from neo4j import GraphDatabase, basic_auth
 
 from pointnet_s3dis.online_segmentation import process_uploaded_array
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Import generative UI router
+try:
+    from .generative_ui.api import router as generative_ui_router
+    GENERATIVE_UI_AVAILABLE = True
+except ImportError:
+    GENERATIVE_UI_AVAILABLE = False
+    print("Warning: Generative UI module not available")
+
 
 env_path = Path(__file__).resolve().parent.parent / ".env"
-if not env_path.exists():
-    raise RuntimeError(f"Missing .env file at {env_path}. Copy .env.example to .env and configure.")
-load_dotenv(env_path)
+if env_path.exists():
+    load_dotenv(env_path)
+else:
+    logger.warning(
+        "Missing .env file at %s. Copy .env.example to .env and configure for full functionality.",
+        env_path,
+    )
 
 # All configuration from .env - no hardcoded defaults
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -30,17 +46,19 @@ NEO4J_DATABASE = os.getenv("NEO4J_DATABASE")
 
 # Ollama configuration (local LLM)
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3:latest")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text:latest")
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")  # "ollama" or "gemini"
 
+driver = None
 if not NEO4J_URI or not NEO4J_USER or not NEO4J_PASSWORD:
-    raise RuntimeError("Missing Neo4j configuration. Set NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD in .env")
-
-try:
-    driver = GraphDatabase.driver(NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
-except Exception as e:
-    raise RuntimeError(f"Failed to connect to Neo4j: {e}")
+    logger.warning("Neo4j is not configured (NEO4J_URI/NEO4J_USER/NEO4J_PASSWORD). Neo4j features will be disabled.")
+else:
+    try:
+        driver = GraphDatabase.driver(NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
+    except Exception as e:
+        logger.warning("Failed to connect to Neo4j (%s). Neo4j features will be disabled.", e)
+        driver = None
 
  # noqa: E402
 
@@ -76,13 +94,51 @@ WITHIN_RE = re.compile(r"(within|less than|under)\s+([0-9]*\.?[0-9]+)\s*(m|meter
 COUNT_RE = re.compile(r"(how many|number of|count of)\s+([a-z0-9 _-]+)", re.I)
 LIST_RE = re.compile(r"(find|show|list|what are|give me)\s+(?:all|every)?\s*([a-z0-9 _-]+)", re.I)
 
-app = FastAPI()
+app = FastAPI(title="BIMTwinOps API", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# Import and include Knowledge Graph routes
+try:
+    from .kg_routes import router as kg_router
+    app.include_router(kg_router)
+    logger.info("Knowledge Graph routes loaded successfully")
+except ImportError as e:
+    logger.warning(f"Knowledge Graph routes not available: {e}")
+except Exception as e:
+    logger.error(f"Failed to load Knowledge Graph routes: {e}")
+
+# Import and include GraphQL API
+try:
+    from .kg_graphql import graphql_router
+    app.include_router(graphql_router, prefix="", tags=["GraphQL"])
+    logger.info("GraphQL API enabled at /api/graphql (GraphiQL UI available)")
+except ImportError as e:
+    logger.warning(f"GraphQL API not available: {e}")
+except Exception as e:
+    logger.error(f"Failed to load GraphQL API: {e}")
+
+# Import and include Generative UI routes
+if GENERATIVE_UI_AVAILABLE:
+    try:
+        app.include_router(generative_ui_router, prefix="/api/ui", tags=["Generative UI"])
+        logger.info("Generative UI API enabled at /api/ui")
+    except Exception as e:
+        logger.error(f"Failed to load Generative UI routes: {e}")
+
+# Import and include HITL approval routes
+try:
+    from .approvals.api import router as approvals_router
+    app.include_router(approvals_router)
+    logger.info("Approvals API enabled at /api/approvals")
+except Exception as e:
+    logger.warning("Approvals API not available: %s", e)
 
 
 @app.get("/health/neo4j")
 def health_neo4j():
     """Basic Neo4j connectivity check (and verifies the selected database exists)."""
+    if driver is None:
+        raise HTTPException(status_code=503, detail="Neo4j is not configured or not reachable")
     try:
         with driver.session(database=NEO4J_DATABASE) as session:
             row = session.run("RETURN 1 AS ok").single()
@@ -183,6 +239,8 @@ def neo4j_json(v: Any):
         return str(v)
 
 def run_cypher_and_serialize(cypher: str) -> List[Dict[str, Any]]:
+    if driver is None:
+        raise RuntimeError("Neo4j driver is not available")
     with driver.session(database=NEO4J_DATABASE) as session:
         results = session.run(cypher).data()
     json_rows = []
