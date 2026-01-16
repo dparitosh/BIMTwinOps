@@ -158,9 +158,12 @@ if ($pointnetFiles.Count -gt 2) {
 # ============================================================================
 Write-Step "Creating Python Virtual Environment"
 
-$venvPath = Join-Path $repoRoot '.venv'
-$venvPython = Join-Path $venvPath 'Scripts\python.exe'
-$venvPip = Join-Path $venvPath 'Scripts\pip.exe'
+# Use explicit path construction to avoid Join-Path issues with dotfiles
+$venvPath = "$repoRoot\.venv"
+$venvPython = "$venvPath\Scripts\python.exe"
+$venvPip = "$venvPath\Scripts\pip.exe"
+
+Write-Info "Venv path: $venvPath"
 
 if (Test-Path $venvPython) {
   Write-Info "Virtual environment already exists at: $venvPath"

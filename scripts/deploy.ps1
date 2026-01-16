@@ -70,7 +70,8 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $repoRoot = Split-Path -Parent $scriptDir
 
 # PID directory for tracking processes
-$pidDir = Join-Path $repoRoot '.pids'
+# Use string concatenation to avoid Join-Path issues with dotfiles in PS 5.1
+$pidDir = "$repoRoot\.pids"
 if (-not (Test-Path $pidDir)) {
   New-Item -ItemType Directory -Path $pidDir -Force | Out-Null
 }
@@ -191,8 +192,8 @@ function Start-ServiceProcess($name, $workingDir, $command, $pidFile, $logFile, 
 # ============================================================================
 Write-Step "Pre-flight Checks"
 
-# Check venv exists
-$venvPython = Join-Path $repoRoot '.venv\Scripts\python.exe'
+# Check venv exists (use string concat for PS 5.1 compatibility with dotfiles)
+$venvPython = "$repoRoot\.venv\Scripts\python.exe"
 if (Test-Path $venvPython) {
   $pyVer = & $venvPython --version 2>&1
   Write-Success "Python venv: $pyVer"
@@ -223,9 +224,9 @@ if (Test-Path $venvPython) {
 }
 
 # Check .env files
-$backendEnv = Join-Path $repoRoot 'backend\.env'
-$apsEnv = Join-Path $repoRoot 'backend\aps-service\.env'
-$frontendEnv = Join-Path $repoRoot 'pointcloud-frontend\.env'
+$backendEnv = "$repoRoot\backend\.env"
+$apsEnv = "$repoRoot\backend\aps-service\.env"
+$frontendEnv = "$repoRoot\pointcloud-frontend\.env"
 
 if (Test-Path $backendEnv) {
   Write-Success "Backend .env exists"
