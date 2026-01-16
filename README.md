@@ -106,8 +106,10 @@ BIMTwinOps/
 │   ├── BSDD_INTEGRATION.md         # bSDD integration guide
 │   └── MODULE_INTEGRATION.md        # Architecture docs
 └── scripts/
-    ├── start-services.ps1           # Start all services (Windows)
-    └── stop-services.ps1            # Stop all services
+    ├── setup.ps1                    # Install dependencies (run once)
+    ├── deploy.ps1                   # Start services with validation
+    ├── stop-services.ps1            # Stop all services
+    └── configure.ps1                # Interactive port/credential config
 
 ```
 
@@ -115,212 +117,95 @@ BIMTwinOps/
 
 ### Prerequisites
 
-- **Python 3.9+** with PyTorch
-- **Node.js 18+**
+- **Python 3.10+** with pip
+- **Node.js 18+** with npm
+- **Git** (for submodules)
 - **Neo4j 5.x** (desktop or cloud)
-- **BaseX 10.x** (~8 MB, native Windows, no Docker) - XML/JSON document database
-- **Java 11+** (for BaseX runtime)
-- **Ollama** (optional, recommended for local GenAI features)
-- **Azure OpenAI** account (optional, for Azure-hosted GenAI features)
-- **Autodesk Platform Services** credentials (optional)
+- **Ollama** (optional, for local GenAI)
 
-### 1. Clone Repository
+### Windows Installation (2 commands)
 
 ```powershell
+# 1. Clone with submodules
 git clone --recurse-submodules https://github.com/dparitosh/BIMTwinOps.git
 cd BIMTwinOps
+
+# 2. Run setup (shows all output, validates everything)
+.\scripts\setup.ps1
+
+# 3. Deploy services (starts all, validates endpoints, opens browser)
+.\scripts\deploy.ps1
 ```
 
-### Windows: auto-install (recommended)
+That's it! The scripts show every step and confirm endpoints are working.
 
-This repo includes an interactive installer that:
-- prompts for configuration (with examples)
-- generates `.env` files
-- installs Python/Node dependencies
+### Script Reference
 
-Run from repo root:
+| Script | Purpose |
+|--------|---------|
+| `setup.ps1` | One-time install: venv, pip, npm, .env files |
+| `deploy.ps1` | Start services + validate endpoints |
+| `stop-services.ps1 -All -Force` | Stop all running services |
+| `configure.ps1` | Interactive wizard to change ports/credentials |
 
-- `powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1`
-
-Docs: see `docs/WINDOWS_AUTO_INSTALL.md`.
-
-Notes:
-
-- If a port is already in use (common on dev machines), re-run `scripts/configure.ps1` to pick a free port and restart services.
-- The Vite frontend reads `VITE_*` variables at startup, so restart the frontend after changing `pointcloud-frontend/.env`.
-- PointNet model weights are not always bundled; when missing, point cloud upload can run in a fallback mode.
-
-### Start/Stop everything on Windows (recommended)
-
-This repo includes convenience scripts that start the dev services in the background and track their PIDs/logs in a local `.pids/` folder.
-
-From the repo root:
-
-- Start all services (Frontend + APS service + API): `powershell -ExecutionPolicy Bypass -File .\scripts\start-services.ps1 -All`
-- Stop all services: `powershell -ExecutionPolicy Bypass -File .\scripts\stop-services.ps1 -All -Force`
-
-Notes:
-
-- The scripts start:
-  - Frontend: Vite dev server (default port **5173**)
-  - APS service: Node dev server (default port **3001**)
-  - API: FastAPI via Uvicorn (default port **8000**, or `BACKEND_PORT` from `backend/.env`)
-- They **do not** automatically start external dependencies (Neo4j/BaseX/OpenSearch). Start those separately.
-- Logs are written to `.pids/*.out.log` and `.pids/*.err.log`.
-
-### 2. Setup Backend (Python + Knowledge Graph)
+### Troubleshooting
 
 ```powershell
-cd backend
+# View backend errors
+Get-Content .\.pids\api.err.log -Tail 50
 
-# Install dependencies
-pip install -r api\requirements.txt
-pip install -r pointnet_s3dis\requirements.txt
+# Check what's running on a port
+Get-NetTCPConnection -LocalPort 8000 -State Listen
 
-# Configure environment
-copy .env.example .env
-# Edit backend\.env with your credentials:
-#   - NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
-#   - GOOGLE_API_KEY (optional)
-#   - LLM_PROVIDER (optional, default: ollama)
-#   - OLLAMA_BASE_URL / OLLAMA_MODEL (optional)
-#   - BACKEND_PORT (optional, default 8000)
-
-# Initialize knowledge graph schema
-python api\knowledge_graph_schema.py
-
-# (Optional) Ingest bSDD data
-python api\bsdd_ingestion.py
-
-# Start FastAPI server (default: 8000)
-python -m uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+# Reconfigure ports if conflicts
+.\scripts\configure.ps1
+.\scripts\deploy.ps1
 ```
 
-### 3. Setup APS Service (Node.js)
+### Manual Setup (alternative)
+
+If you prefer manual control:
+
+```powershell
+# Backend
+cd backend
+python -m venv ..\.venv
+..\.venv\Scripts\activate
+pip install -r api\requirements.txt
+copy .env.example .env
+# Edit .env with Neo4j credentials
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+
+# Frontend (new terminal)
+cd pointcloud-frontend
+npm install
+copy .env.example .env
+npm run dev
+```
+
+### 3. Setup APS Service (optional)
+
+Only needed if using Autodesk Platform Services:
 
 ```powershell
 cd backend\aps-service
-
-# Install dependencies
 npm install
-
-# Configure environment
 copy .env.example .env
-# Edit .env with Autodesk credentials
-
-# Start APS service
+# Edit .env: APS_CLIENT_ID, APS_CLIENT_SECRET
 npm run dev
 ```
 
-### 4. Setup Frontend (React)
+## 🔗 Service URLs
 
-- `APS_CLIENT_ID`
-- `APS_CLIENT_SECRET`
-- (optional) `APS_SCOPES`
+After running `.\scripts\deploy.ps1`:
 
-For 3-legged (ACC/Docs), also set:
-
-- `APS_CALLBACK_URL` (must match your APS app callback URL, e.g. `http://127.0.0.1:3001/aps/oauth/callback`)
-- (optional) `APS_OAUTH_SCOPES` (default: `data:read viewables:read`)
-- (optional) `APS_CORS_ORIGINS` (default allows Vite dev server)
-
-For demo scalability, Redis can be used to store sessions/tokens:
-
-- `APS_STORE=redis`
-- `REDIS_URL=redis://127.0.0.1:6379`
-
-### Run
-
-From `backend/aps-service`:
-
-`npm install`
-
-`npm run dev`
-
-The service will be available at:
-
-- `GET http://127.0.0.1:3001/` (serves the React UI when `FRONTEND_MODE=proxy|static`)
-- `GET http://127.0.0.1:3001/health`
-- `GET http://127.0.0.1:3001/aps/token`
-
-### Recommended dev topology (single entrypoint)
-
-Run both processes:
-
-1) Start the React dev server:
-
-`cd pointcloud-frontend`
-
-`npm run dev`
-
-2) Start APS service as the entrypoint (proxies UI at `/`):
-
-Create `backend/aps-service/.env` with:
-
-- `FRONTEND_MODE=proxy`
-- `FRONTEND_DEV_URL=http://localhost:5173`
-
-Then run:
-
-`cd backend/aps-service`
-
-`npm run dev`
-
-Open the app at `http://127.0.0.1:3001/` (not `:5173`).
-
-### Static mode (single process)
-
-1) Build frontend:
-
-`cd pointcloud-frontend`
-
-`npm run build`
-
-2) Set in `backend/aps-service/.env`:
-
-- `FRONTEND_MODE=static`
-- `FRONTEND_DIST_DIR=../../pointcloud-frontend/dist`
-
-3) Start APS service and open `http://127.0.0.1:3001/`.
-
-3-legged OAuth endpoints:
-
-```powershell
-cd pointcloud-frontend
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-```
-
-### 5. Start All Services (Windows)
-
-Use the convenience scripts:
-
-```powershell
-# Start all services
-.\scripts\start-services.ps1
-
-# Start specific services
-.\scripts\start-services.ps1 -Api      # Backend only
-.\scripts\start-services.ps1 -Aps      # APS service only
-.\scripts\start-services.ps1 -Frontend  # Frontend only
-
-# Stop all services
-.\scripts\stop-services.ps1 -Force
-```
-
-### 6. Access the Platform
-
-- **Frontend**: http://localhost:5173
-- **Backend API**: http://localhost:8001
-- **APS Service**: http://localhost:3001
-- **API Docs (Swagger)**: http://localhost:8001/docs
-- **GraphQL API**: http://localhost:8001/api/graphql
-- **GraphiQL Playground**: http://localhost:8001/api/graphql (interactive UI)
-- **Knowledge Graph Health**: http://localhost:8001/api/kg/health
+| Service | URL |
+|---------|-----|
+| **Frontend** | http://localhost:5173 |
+| **Backend API** | http://localhost:8000 |
+| **API Docs (Swagger)** | http://localhost:8000/docs |
+| **GraphQL Playground** | http://localhost:8000/api/graphql |
+| **APS Service** | http://localhost:3001 |
 
 ## 📚 Core Modules
 
