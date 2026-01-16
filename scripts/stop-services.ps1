@@ -11,6 +11,26 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 $pidDir = Join-Path $repoRoot '.pids'
 
+function Get-EnvValueFromFile([string]$path, [string]$key) {
+  if (-not (Test-Path $path)) { return $null }
+  foreach ($line in (Get-Content -LiteralPath $path -ErrorAction SilentlyContinue)) {
+    if (-not $line) { continue }
+    $t = $line.Trim()
+    if (-not $t) { continue }
+    if ($t.StartsWith('#')) { continue }
+    $m = [regex]::Match($t, "^\s*" + [regex]::Escape($key) + "\s*=\s*(.+?)\s*$")
+    if (-not $m.Success) { continue }
+    $val = $m.Groups[1].Value.Trim()
+    if ($val.Length -ge 2) {
+      if (($val.StartsWith('"') -and $val.EndsWith('"')) -or ($val.StartsWith("'") -and $val.EndsWith("'"))) {
+        $val = $val.Substring(1, $val.Length - 2)
+      }
+    }
+    return $val
+  }
+  return $null
+}
+
 function Stop-ByPidFile([string]$name) {
   $pidFile = Join-Path $pidDir ("$name.pid")
   if (-not (Test-Path $pidFile)) {
@@ -64,22 +84,22 @@ if ($stopFrontend) {
 
 if ($stopAps) {
   Stop-ByPidFile 'aps-service'
-  Stop-ByPort 'aps-service' 3001
+  $envPath = Join-Path $repoRoot 'backend\.env'
+  $apsPort = 3001
+  $apsPortValue = Get-EnvValueFromFile -path $envPath -key 'APS_SERVICE_PORT'
+  if ($apsPortValue -and ($apsPortValue -match '^\d+$')) {
+    $apsPort = [int]$apsPortValue
+  }
+  Stop-ByPort 'aps-service' $apsPort
 }
 
 if ($stopApi) {
   Stop-ByPidFile 'api'
   $envPath = Join-Path $repoRoot 'backend\.env'
   $backendPort = 8000
-  if (Test-Path $envPath) {
-    $envContent = Get-Content $envPath
-    $portLine = $envContent | Where-Object { $_ -match '^BACKEND_PORT\s*=\s*(.+)' }
-    if ($portLine) {
-      $backendPortText = $Matches[1].Trim()
-      if ($backendPortText -match '^\d+$') {
-        $backendPort = [int]$backendPortText
-      }
-    }
+  $portValue = Get-EnvValueFromFile -path $envPath -key 'BACKEND_PORT'
+  if ($portValue -and ($portValue -match '^\d+$')) {
+    $backendPort = [int]$portValue
   }
   Stop-ByPort 'api' $backendPort
 }

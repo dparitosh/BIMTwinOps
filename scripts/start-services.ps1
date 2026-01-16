@@ -11,6 +11,26 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 $pidDir = Join-Path $repoRoot '.pids'
 New-Item -ItemType Directory -Force -Path $pidDir | Out-Null
 
+function Get-EnvValueFromFile([string]$path, [string]$key) {
+  if (-not (Test-Path $path)) { return $null }
+  foreach ($line in (Get-Content -LiteralPath $path -ErrorAction SilentlyContinue)) {
+    if (-not $line) { continue }
+    $t = $line.Trim()
+    if (-not $t) { continue }
+    if ($t.StartsWith('#')) { continue }
+    $m = [regex]::Match($t, "^\s*" + [regex]::Escape($key) + "\s*=\s*(.+?)\s*$")
+    if (-not $m.Success) { continue }
+    $val = $m.Groups[1].Value.Trim()
+    if ($val.Length -ge 2) {
+      if (($val.StartsWith('"') -and $val.EndsWith('"')) -or ($val.StartsWith("'") -and $val.EndsWith("'"))) {
+        $val = $val.Substring(1, $val.Length - 2)
+      }
+    }
+    return $val
+  }
+  return $null
+}
+
 function Test-ProcessRunning([int]$processId) {
   try {
     $p = Get-Process -Id $processId -ErrorAction Stop
@@ -62,7 +82,7 @@ function Start-TrackedProcess(
   }
 
   $psCommand = @(
-    "Set-Location -LiteralPath '$($wd.Path)';",
+    "Set-Location -LiteralPath '$($wd.Path.Replace("'", "''"))';",
     $command
   ) -join ' '
 
@@ -92,12 +112,9 @@ if ($startApi) {
   # Load .env to get BACKEND_PORT
   $envPath = Join-Path $repoRoot 'backend\.env'
   $backendPort = '8000'
-  if (Test-Path $envPath) {
-    $envContent = Get-Content $envPath
-    $portLine = $envContent | Where-Object { $_ -match '^BACKEND_PORT\s*=\s*(.+)' }
-    if ($portLine) {
-      $backendPort = $Matches[1].Trim()
-    }
+  $portValue = Get-EnvValueFromFile -path $envPath -key 'BACKEND_PORT'
+  if ($portValue -and ($portValue -match '^\d+$')) {
+    $backendPort = $portValue
   }
   # Prefer workspace venv Python if present.
   $venvPython = Join-Path $repoRoot '.venv\Scripts\python.exe'

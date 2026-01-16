@@ -131,6 +131,19 @@ git clone --recurse-submodules https://github.com/dparitosh/BIMTwinOps.git
 cd BIMTwinOps
 ```
 
+### Windows: auto-install (recommended)
+
+This repo includes an interactive installer that:
+- prompts for configuration (with examples)
+- generates `.env` files
+- installs Python/Node dependencies
+
+Run from repo root:
+
+- `powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1`
+
+Docs: see `docs/WINDOWS_AUTO_INSTALL.md`.
+
 ### Start/Stop everything on Windows (recommended)
 
 This repo includes convenience scripts that start the dev services in the background and track their PIDs/logs in a local `.pids/` folder.

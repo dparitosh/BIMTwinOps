@@ -1,6 +1,7 @@
 param(
   [switch]$SkipPython,
   [switch]$SkipNode,
+  [switch]$SkipPointNet,
   [switch]$ForceEnv
 )
 
@@ -84,7 +85,9 @@ if (-not $SkipPython) {
 
   # PointNet deps are optional but commonly needed for point cloud segmentation
   $pointnetReq = Join-Path $repoRoot 'backend\pointnet_s3dis\requirements.txt'
-  if (Test-Path $pointnetReq) {
+  if ($SkipPointNet) {
+    Write-Host "Skipping PointNet deps (SkipPointNet set)"
+  } elseif (Test-Path $pointnetReq) {
     Write-Step "Installing PointNet (pointnet_s3dis) dependencies"
     & $venvPython -m pip install -r $pointnetReq
   } else {
