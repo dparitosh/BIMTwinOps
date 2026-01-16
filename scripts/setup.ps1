@@ -138,50 +138,19 @@ try {
 }
 
 # ============================================================================
-# STEP 2: Initialize Git Submodules / Clone PointNet
+# STEP 2: Verify PointNet Directory
 # ============================================================================
-Write-Step "Initializing Git Submodules / PointNet"
+Write-Step "Verifying PointNet Directory"
 
 $pointnetDir = Join-Path $repoRoot 'backend\pointnet_s3dis'
-$gitDir = Join-Path $repoRoot '.git'
 
-# Check if this is a git repository
-if (Test-Path $gitDir) {
-  # It's a git repo - use submodule update
-  Push-Location $repoRoot
-  try {
-    Write-Info "Running: git submodule update --init --recursive"
-    & git submodule update --init --recursive 2>&1 | ForEach-Object { Write-Host "  $_" }
-  } finally {
-    Pop-Location
-  }
-} else {
-  # Not a git repo (downloaded as ZIP) - clone pointnet directly
-  Write-Warn "Not a git repository (downloaded as ZIP?)"
-  Write-Info "Will clone PointNet repo directly instead of using submodules"
-  
-  if (Test-Path $pointnetDir) {
-    $pointnetFiles = Get-ChildItem $pointnetDir -ErrorAction SilentlyContinue
-    if ($pointnetFiles.Count -gt 2) {
-      Write-Info "PointNet directory already has content, skipping clone"
-    } else {
-      # Directory exists but empty - remove and clone
-      Remove-Item $pointnetDir -Recurse -Force -ErrorAction SilentlyContinue
-      Write-Info "Cloning PointNet from GitHub..."
-      & git clone https://github.com/bhupesh-varma/pointnet_s3dis.git "$pointnetDir" 2>&1 | ForEach-Object { Write-Host "  $_" }
-    }
-  } else {
-    Write-Info "Cloning PointNet from GitHub..."
-    & git clone https://github.com/bhupesh-varma/pointnet_s3dis.git "$pointnetDir" 2>&1 | ForEach-Object { Write-Host "  $_" }
-  }
-}
-
-# Verify pointnet_s3dis is populated
+# PointNet is now merged into the repo (not a submodule)
 $pointnetFiles = Get-ChildItem $pointnetDir -ErrorAction SilentlyContinue
 if ($pointnetFiles.Count -gt 2) {
-  Write-Success "PointNet directory initialized ($($pointnetFiles.Count) items)"
+  Write-Success "PointNet directory found ($($pointnetFiles.Count) items)"
 } else {
-  Write-Warn "PointNet directory may be empty - segmentation features may not work"
+  Write-Warn "PointNet directory missing or empty - point cloud segmentation will not work"
+  Write-Info "This is expected if you used -SkipPointNet flag"
 }
 
 # ============================================================================

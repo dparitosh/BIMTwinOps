@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.pyc
+
+# Datasets
+s3dis_data/
+Stanford3dDataset_v1.2_Aligned_Version/
+
+# Training artifacts (handled by LFS)
+*.pth
