@@ -1,40 +1,45 @@
 @echo off
-REM Batch script to start the BIMTwinOps React frontend
+REM BIMTwinOps - Start Frontend Server
 REM Usage: start-frontend.bat
 
+echo.
 echo Starting BIMTwinOps Frontend...
+echo.
 
-REM Check if Node.js is installed
+REM Check Node
 node --version >nul 2>&1
 if errorlevel 1 (
-    echo Error: Node.js is not installed or not in PATH
-    echo Please install Node.js from https://nodejs.org/
+    echo ERROR: Node.js is not installed or not in PATH
+    echo Install from https://nodejs.org/
     pause
     exit /b 1
 )
 
-REM Display versions
-echo Node version:
-node --version
-echo npm version:
-npm --version
-echo.
-
-REM Navigate to frontend directory
+REM Navigate to frontend
 cd /d "%~dp0pointcloud-frontend"
 
-REM Check if node_modules exists
+REM Install dependencies if needed
 if not exist "node_modules" (
-    echo node_modules not found. Installing dependencies...
+    echo Installing npm dependencies...
     npm install
+)
+
+REM Create .env if not exists
+if not exist ".env" (
+    echo Creating default .env file...
+    (
+        echo VITE_API_BASE_URL=http://localhost:8000
+        echo VITE_APS_SERVICE_URL=http://localhost:3001
+    ) > .env
 )
 
 echo.
 echo ========================================
-echo Starting Vite dev server...
-echo Frontend: http://localhost:5173
-echo Press Ctrl+C to stop
+echo Vite Dev Server
 echo ========================================
+echo   URL: http://localhost:5173
+echo ========================================
+echo Press Ctrl+C to stop
 echo.
 
 npm run dev

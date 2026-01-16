@@ -1,69 +1,136 @@
 <#
 .SYNOPSIS
-  Start the BIMTwinOps React frontend
+  Start BIMTwinOps React frontend
 
 .DESCRIPTION
-  Runs npm dev server (Vite) on port 5173
+  Checks configuration and runs Vite development server on port 5173
 
 .EXAMPLE
   .\start-frontend.ps1
+  .\start-frontend.ps1 -SkipChecks
 
 .NOTES
-  Run bootstrap.ps1 first if node_modules doesn't exist.
+  Run bootstrap.ps1 first if node_modules doesn't exist
 #>
 
-Write-Host "Starting BIMTwinOps Frontend..." -ForegroundColor Green
+Param(
+  [switch]$SkipChecks
+)
 
-# Check if Node.js is installed
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-  Write-Host "Error: Node.js is not installed or not in PATH" -ForegroundColor Red
-  Write-Host "Please install Node.js from https://nodejs.org/" -ForegroundColor Yellow
-  exit 1
-}
+$ErrorActionPreference = 'Stop'
+$root = $PSScriptRoot
 
-# Check if npm is installed
-if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-  Write-Host "Error: npm is not installed or not in PATH" -ForegroundColor Red
-  exit 1
-}
-
-# Display versions
-Write-Host "Node version: $(node --version)" -ForegroundColor Cyan
-Write-Host "npm version: $(npm --version)" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Green
+Write-Host "  BIMTwinOps Frontend Server" -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 
-$root = $PSScriptRoot
+# Check Node
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  Write-Host "[X] Node.js: NOT FOUND" -ForegroundColor Red
+  Write-Host "    Install from https://nodejs.org/" -ForegroundColor Yellow
+  exit 1
+}
+$nodeVersion = node --version
+Write-Host "[OK] Node.js: $nodeVersion" -ForegroundColor Green
+
+# Check npm
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+  Write-Host "[X] npm: NOT FOUND" -ForegroundColor Red
+  exit 1
+}
+$npmVersion = npm --version
+Write-Host "[OK] npm: v$npmVersion" -ForegroundColor Green
+
+# Paths
 $frontendDir = [IO.Path]::Combine($root, 'pointcloud-frontend')
 
-# Navigate to frontend directory
+# Navigate to frontend
 Set-Location $frontendDir
 
-# Check if .env file exists
-if (-not (Test-Path ".env")) {
-  Write-Host "Creating default .env file..." -ForegroundColor Yellow
+# Check node_modules
+if (-not (Test-Path "node_modules")) {
+  Write-Host "[!] node_modules not found. Installing..." -ForegroundColor Yellow
+  npm install
+}
+Write-Host "[OK] node_modules: Found" -ForegroundColor Green
+
+# ============================================================================
+# Read Configuration from .env
+# ============================================================================
+Write-Host ""
+Write-Host "--- Configuration ---" -ForegroundColor Cyan
+
+$apiBaseUrl = "http://localhost:8000"
+$apsServiceUrl = "http://localhost:3001"
+
+if (Test-Path ".env") {
+  Write-Host "[OK] .env file: Found" -ForegroundColor Green
+  $content = Get-Content ".env" -Raw
+  
+  if ($content -match "VITE_API_BASE_URL\s*=\s*([^\s\r\n]+)") { $apiBaseUrl = $Matches[1] }
+  if ($content -match "VITE_APS_SERVICE_URL\s*=\s*([^\s\r\n]+)") { $apsServiceUrl = $Matches[1] }
+} else {
+  Write-Host "[!] .env file: Creating default..." -ForegroundColor Yellow
   @"
 VITE_API_BASE_URL=http://localhost:8000
 VITE_APS_SERVICE_URL=http://localhost:3001
 "@ | Out-File -FilePath ".env" -Encoding UTF8
-  Write-Host "Created .env with default values" -ForegroundColor Green
+  Write-Host "[OK] .env file: Created" -ForegroundColor Green
 }
 
-# Check if node_modules exists
-if (-not (Test-Path "node_modules")) {
-  Write-Host "node_modules not found. Installing dependencies..." -ForegroundColor Yellow
-  npm install
-} else {
-  Write-Host "Checking for dependency updates..." -ForegroundColor Yellow
-  npm install
+Write-Host "     API Base URL: $apiBaseUrl" -ForegroundColor White
+Write-Host "     APS Service:  $apsServiceUrl" -ForegroundColor White
+
+# ============================================================================
+# Connection Checks
+# ============================================================================
+if (-not $SkipChecks) {
+  Write-Host ""
+  Write-Host "--- Connection Checks ---" -ForegroundColor Cyan
+  
+  # Check if port 5173 is available
+  $portInUse = Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue
+  if ($portInUse) {
+    Write-Host "[X] Port 5173: IN USE (PID: $($portInUse.OwningProcess))" -ForegroundColor Red
+    Write-Host "    Run .\stop-frontend.ps1 first" -ForegroundColor Yellow
+    exit 1
+  } else {
+    Write-Host "[OK] Port 5173: Available" -ForegroundColor Green
+  }
+  
+  # Check Backend API connection
+  try {
+    $backendResp = Invoke-WebRequest -Uri "$apiBaseUrl/health" -Method GET -TimeoutSec 3 -ErrorAction SilentlyContinue
+    if ($backendResp.StatusCode -eq 200) {
+      Write-Host "[OK] Backend API: Connected ($apiBaseUrl)" -ForegroundColor Green
+    } else {
+      Write-Host "[!] Backend API: Responded with status $($backendResp.StatusCode)" -ForegroundColor Yellow
+    }
+  } catch {
+    Write-Host "[X] Backend API: Not running or unreachable" -ForegroundColor Red
+    Write-Host "    Start backend first: .\start-backend.ps1" -ForegroundColor Yellow
+  }
+  
+  # Check APS Service connection (optional)
+  try {
+    $apsResp = Invoke-WebRequest -Uri "$apsServiceUrl/health" -Method GET -TimeoutSec 2 -ErrorAction SilentlyContinue
+    if ($apsResp.StatusCode -eq 200) {
+      Write-Host "[OK] APS Service: Connected ($apsServiceUrl)" -ForegroundColor Green
+    }
+  } catch {
+    Write-Host "[--] APS Service: Not running (optional)" -ForegroundColor Gray
+  }
 }
 
-# Start the development server
 Write-Host ""
-Write-Host "========================================" -ForegroundColor Green
-Write-Host "Starting Vite dev server..." -ForegroundColor Green
-Write-Host "Frontend: http://localhost:5173" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  Starting Vite Dev Server" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  URL: http://localhost:5173" -ForegroundColor White
+Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Press Ctrl+C to stop" -ForegroundColor Yellow
-Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 
 npm run dev
