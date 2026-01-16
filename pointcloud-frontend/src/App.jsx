@@ -20,8 +20,10 @@ const APS_API_URL =
   import.meta.env.VITE_APS_API_URL
   || (String(window.location.port) === "3001" ? window.location.origin : "http://127.0.0.1:3001");
 
+// In dev mode, prefer relative URLs so Vite proxy handles routing.
+// In production or if VITE_BACKEND_API_URL is explicitly set, use the full URL.
 const BACKEND_API_URL =
-  import.meta.env.VITE_BACKEND_API_URL || "http://127.0.0.1:8000";
+  import.meta.env.VITE_BACKEND_API_URL || (import.meta.env.DEV ? "" : "http://127.0.0.1:8000");
 
 /**
  Expected backend JSON contract for /upload:
