@@ -86,7 +86,7 @@ BIMTwinOps/
 │   │   ├── genai_service.py        # Azure OpenAI GenAI service
 │   │   ├── kg_routes.py            # Knowledge Graph API routes
 │   │   └── requirements.txt         # Python dependencies
-│   ├── pointnet_s3dis/              # PointNet S3DIS (submodule)
+│   ├── pointnet_s3dis/              # PointNet S3DIS semantic segmentation
 │   │   ├── src/models/              # PyTorch PointNet
 │   │   └── online_segmentation.py   # Inference + Neo4j
 │   ├── aps-service/                 # Node.js APS service
@@ -119,15 +119,15 @@ BIMTwinOps/
 
 - **Python 3.10+** with pip
 - **Node.js 18+** with npm
-- **Git** (for submodules)
+- **Git** (optional, for cloning)
 - **Neo4j 5.x** (desktop or cloud)
 - **Ollama** (optional, for local GenAI)
 
 ### Windows Installation (2 commands)
 
 ```powershell
-# 1. Clone with submodules
-git clone --recurse-submodules https://github.com/dparitosh/BIMTwinOps.git
+# 1. Clone the repository (or download ZIP)
+git clone https://github.com/dparitosh/BIMTwinOps.git
 cd BIMTwinOps
 
 # 2. Run setup (shows all output, validates everything)

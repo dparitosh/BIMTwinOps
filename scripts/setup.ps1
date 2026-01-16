@@ -150,7 +150,7 @@ if ($pointnetFiles.Count -gt 2) {
   Write-Success "PointNet directory found ($($pointnetFiles.Count) items)"
 } else {
   Write-Warn "PointNet directory missing or empty - point cloud segmentation will not work"
-  Write-Info "This is expected if you used -SkipPointNet flag"
+  Write-Info "Re-download the repository to get the PointNet files"
 }
 
 # ============================================================================
