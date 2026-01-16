@@ -43,6 +43,10 @@ backend/pointnet_s3dis/**/processed/**
 *.pcd
 *.txt
 
+# Keep large dataset formats ignored by default, but allow shipping a small
+# sample used by the documentation/demo.
+!docs/Area_1_conferenceRoom_1_point.npy
+
 # Python cache
 __pycache__/
 *.pyc
