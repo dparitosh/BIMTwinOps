@@ -60,3 +60,4 @@ __pycache__/
 
 # Local dev service PID/log directory (created by scripts/start-services.ps1)
 .pids/
+backend/api/approvals/pending_actions.json
