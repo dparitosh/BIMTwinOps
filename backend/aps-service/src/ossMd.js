@@ -33,19 +33,35 @@ export function createOssMdApi({ config, getAppAuthHeader, getUserAuthHeader }) 
 
   async function ensureBucket(bucketKey) {
     const region = toRegion(config.APS_OSS_REGION);
+    const accessToken = (await getAppAuthHeader()).replace('Bearer ', '');
+    console.log('[ensureBucket] bucketKey:', bucketKey, 'region:', region);
     try {
-      await oss.getBucketDetails(bucketKey, { authorization: await getAppAuthHeader() });
+      // SDK: getBucketDetails(bucketKey, { accessToken })
+      const details = await oss.getBucketDetails(bucketKey, { accessToken });
+      console.log('[ensureBucket] exists:', details);
       return { ok: true, bucketKey, existed: true };
-    } catch {
-      await oss.createBucket(region, { bucketKey, policyKey: PolicyKey.Transient }, { authorization: await getAppAuthHeader() });
-      return { ok: true, bucketKey, existed: false };
+    } catch (err) {
+      console.log('[ensureBucket] not found, creating...', err?.message);
+      try {
+        // SDK: createBucket(region, { bucketKey, policyKey }, { accessToken })
+        const created = await oss.createBucket(region, { bucketKey, policyKey: PolicyKey.Transient }, { accessToken });
+        console.log('[ensureBucket] created:', created);
+        return { ok: true, bucketKey, existed: false };
+      } catch (createErr) {
+        console.error('[ensureBucket] create failed:', createErr);
+        throw createErr;
+      }
     }
   }
 
   async function uploadObject({ bucketKey, objectKey, buffer }) {
+    console.log('[uploadObject] bucketKey:', bucketKey, 'objectKey:', objectKey, 'bufferSize:', buffer?.length);
     await ensureBucket(bucketKey);
-    // SDK supports passing Buffer directly as sourceToUpload
-    const resp = await oss.uploadObject(bucketKey, objectKey, buffer, { authorization: await getAppAuthHeader() });
+    const accessToken = (await getAppAuthHeader()).replace('Bearer ', '');
+    // SDK: uploadObject(bucketKey, objectKey, sourceToUpload, { accessToken })
+    console.log('[uploadObject] calling oss.uploadObject...');
+    const resp = await oss.uploadObject(bucketKey, objectKey, buffer, { accessToken });
+    console.log('[uploadObject] response:', resp);
     return resp;
   }
 
@@ -55,19 +71,23 @@ export function createOssMdApi({ config, getAppAuthHeader, getUserAuthHeader }) 
 
   async function translate({ urn, force = false, auth = 'app' }) {
     // Basic SVF2 translation request (viewer-friendly)
-    const body = {
+    const jobPayload = {
       input: { urn },
       output: {
         formats: [{ type: 'svf2', views: ['2d', '3d'] }]
       }
     };
-
-    const resp = await md.translate(body, { authorization: await getAuthHeader(auth), xAdsForce: force });
+    
+    const accessToken = (await getAuthHeader(auth)).replace('Bearer ', '');
+    // SDK: startJob(jobPayload, { accessToken, xAdsForce })
+    const resp = await md.startJob(jobPayload, { accessToken, xAdsForce: force });
     return resp;
   }
 
   async function manifest({ urn, auth = 'app' }) {
-    return await md.getManifest(urn, { authorization: await getAuthHeader(auth) });
+    const accessToken = (await getAuthHeader(auth)).replace('Bearer ', '');
+    // SDK: getManifest(urn, { accessToken })
+    return await md.getManifest(urn, { accessToken });
   }
 
   return {

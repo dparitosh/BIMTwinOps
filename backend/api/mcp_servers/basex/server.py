@@ -99,7 +99,7 @@ class BaseXMCPServer:
             # Create database if it doesn't exist
             try:
                 self.session.execute(f"CHECK {self.db_name}")
-            except:
+            except Exception:
                 logger.info(f"Creating database: {self.db_name}")
                 self.session.execute(f"CREATE DB {self.db_name}")
             
@@ -311,7 +311,7 @@ class BaseXMCPServer:
         try:
             version_result = self.session.query(version_query).execute()
             version_number = int(version_result) if version_result else 1
-        except:
+        except (ValueError, AttributeError):
             version_number = 1
         
         # Create document structure
@@ -559,7 +559,7 @@ class BaseXMCPServer:
             # Create audit log database if it doesn't exist
             try:
                 self.session.execute("CHECK audit_log")
-            except:
+            except Exception:
                 self.session.execute("CREATE DB audit_log")
             
             self.session.execute("OPEN audit_log")

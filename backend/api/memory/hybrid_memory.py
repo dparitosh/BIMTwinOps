@@ -27,6 +27,7 @@ References:
 
 from typing import List, Dict, Any, Optional, Tuple
 import logging
+import os
 from datetime import datetime
 import json
 import hashlib
@@ -55,14 +56,14 @@ class OpenSearchConfig:
         host: str = "localhost",
         port: int = 9200,
         username: str = "admin",
-        password: str = "admin123",
+        password: Optional[str] = None,
         use_ssl: bool = False,
         verify_certs: bool = False
     ):
         self.host = host
         self.port = port
         self.username = username
-        self.password = password
+        self.password = password or os.getenv("OPENSEARCH_PASSWORD", "admin")  # Default for local dev only
         self.use_ssl = use_ssl
         self.verify_certs = verify_certs
     

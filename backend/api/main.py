@@ -4,7 +4,7 @@ import re
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import requests
@@ -154,7 +154,8 @@ class ChatReq(BaseModel):
 @app.post("/upload")
 async def upload_pointcloud(file: UploadFile = File(...)):
     # Check file type
-    filename_lower = file.filename.lower()
+    filename = file.filename or "unknown.npy"
+    filename_lower = filename.lower()
     if filename_lower.endswith(('.ifc', '.rvt', '.dwg', '.dxf', '.nwd', '.nwc')):
         raise HTTPException(
             status_code=400,
@@ -176,7 +177,7 @@ async def upload_pointcloud(file: UploadFile = File(...)):
                 detail=f"Failed to parse file as point cloud data. Expected .npy or text coordinates (CSV/TXT). Error: {str(e)}"
             )
     
-    scene_id = os.path.splitext(file.filename)[0]
+    scene_id = os.path.splitext(filename)[0]
     try:
         return process_uploaded_array(np_array, scene_id=scene_id)
     except FileNotFoundError as e:
@@ -215,7 +216,7 @@ async def upload_pointcloud(file: UploadFile = File(...)):
             "warning": str(e),
         }
 
-def extract_cypher_from_text(text: str) -> (str, str):
+def extract_cypher_from_text(text: str) -> Tuple[str, str]:
     m = CODEBLOCK_RE.search(text or "")
     cypher = ""
     if m:
@@ -287,7 +288,7 @@ def run_cypher_and_serialize(cypher: str) -> List[Dict[str, Any]]:
         json_rows.append(j)
     return json_rows
 
-def fallback_pattern_cypher(question: str, scene_id: Optional[str]) -> (str, str):
+def fallback_pattern_cypher(question: str, scene_id: Optional[str]) -> Tuple[str, str]:
     q = (question or "").lower()
     m = DIST_BETWEEN_RE.search(q)
     if m and scene_id:
