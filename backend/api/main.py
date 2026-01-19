@@ -95,7 +95,7 @@ COUNT_RE = re.compile(r"(how many|number of|count of)\s+([a-z0-9 _-]+)", re.I)
 LIST_RE = re.compile(r"(find|show|list|what are|give me)\s+(?:all|every)?\s*([a-z0-9 _-]+)", re.I)
 
 app = FastAPI(title="BIMTwinOps API", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173","http://127.0.0.1:5173",], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # Import and include Knowledge Graph routes
 try:

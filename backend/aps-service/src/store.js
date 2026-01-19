@@ -58,7 +58,9 @@ export async function createStore({ type, redisUrl }) {
     };
   }
 
-  return { kind: 'memory', ...(new MemoryStore()) };
+  const store = new MemoryStore();
+  store.kind = 'memory';
+  return store;
 }
 
 export function newId() {

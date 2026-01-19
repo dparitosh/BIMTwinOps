@@ -21,7 +21,11 @@ const tokens = createTokenService({ config, store });
 const upload = createUploadMiddleware();
 
 const app = express();
-app.use(express.json({ limit: '2mb' }));
+
+// Increase body size limits (important for APS / MD requests)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
 
 const API_PREFIXES = [
   '/health',

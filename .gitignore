@@ -9,6 +9,9 @@ venv/
 # Environment files (contain secrets)
 .env
 !.env.example
+.env.*
+*.env
+*.env.*
 
 # OS
 .DS_Store

@@ -5,7 +5,7 @@ import { base64UrlEncode } from './utils.js';
 
 export function createUploadMiddleware() {
   // In-memory upload is fine for demo; for production, stream to disk/S3.
-  return multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
+  return multer({ storage: multer.memoryStorage(), limits: { fileSize: 1 * 1024 * 1024 * 1024 } });
 }
 
 function toRegion(value) {
