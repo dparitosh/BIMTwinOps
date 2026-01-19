@@ -96,11 +96,11 @@ if (-not $SkipChecks) {
   # Check if port is available
   $portInUse = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
   if ($portInUse) {
-    Write-Host "[X] Port $port: IN USE (PID: $($portInUse.OwningProcess))" -ForegroundColor Red
+    Write-Host "[X] Port ${port}: IN USE (PID: $($portInUse.OwningProcess))" -ForegroundColor Red
     Write-Host "    Run .\stop-backend.ps1 first or change BACKEND_PORT in .env" -ForegroundColor Yellow
     exit 1
   } else {
-    Write-Host "[OK] Port $port: Available" -ForegroundColor Green
+    Write-Host "[OK] Port ${port}: Available" -ForegroundColor Green
   }
   
   # Check Neo4j connection

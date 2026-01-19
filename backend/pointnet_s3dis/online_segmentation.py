@@ -291,7 +291,11 @@ def process_uploaded_array(np_array: np.ndarray, scene_id: str):
 
 
     # Also write to Neo4j for downstream graph view
-    write_scene_to_neo4j(scene_id, segments, edges)
+    try:
+        write_scene_to_neo4j(scene_id, segments, edges)
+    except Exception as e:
+        import logging
+        logging.warning(f"[UPLOAD] Neo4j unavailable, skipping KG write: {e}")
 
     return {
         "scene_id": scene_id,
