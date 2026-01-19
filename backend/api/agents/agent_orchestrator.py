@@ -101,9 +101,31 @@ except ImportError:  # pragma: no cover
             "next": END,
         }
 
+try:
+    from .planning_agent import planning_agent_node as _planning_agent_node
+except ImportError:  # pragma: no cover
+    async def _planning_agent_node(state: "AgentState") -> "AgentState":
+        """Planning Agent placeholder (used when planning_agent.py is unavailable)."""
+        logger.info("Planning Agent: Using placeholder")
+        msgs = list(state.get("messages", []))
+        return {
+            **state,
+            "messages": msgs + [
+                AIMessage(content="[Planning Agent] Placeholder - Planning agent module not available")
+            ],
+            "next": END,
+        }
+
+try:
+    from .executor_agent import ExecutorAgent
+    _executor_agent = ExecutorAgent()
+except ImportError:  # pragma: no cover
+    _executor_agent = None
+
 # Bind names used by the graph
 query_agent_node = _query_agent_node
 action_agent_node = _action_agent_node
+planning_agent_node = _planning_agent_node
 
 
 # ============================================================================
@@ -177,6 +199,82 @@ def _classify_intent(user_input: str) -> tuple[str, str]:
 
 
 # ============================================================================
+# Topic Guardrails (Lightweight - no NeMo dependency)
+# ============================================================================
+
+# BIM/Construction domain keywords for topic validation
+BIM_DOMAIN_KEYWORDS = {
+    # IFC Entity types
+    "ifc", "wall", "door", "window", "slab", "beam", "column", "stair", "roof",
+    "space", "zone", "building", "storey", "floor", "element", "site", "project",
+    # Point cloud
+    "point cloud", "pointcloud", "segment", "segmentation", "scan", "lidar", "3d",
+    # BIM concepts
+    "bim", "model", "geometry", "property", "classification", "bsdd", "ifc4",
+    "pset", "property set", "quantity", "material", "fire rating", "thermal",
+    # Spatial
+    "spatial", "location", "coordinates", "bounds", "near", "adjacent", "contains",
+    # Building systems
+    "hvac", "mep", "plumbing", "electrical", "structural", "architectural",
+    "duct", "pipe", "cable", "conduit", "equipment",
+    # Analysis
+    "compliance", "validation", "clash", "interference", "energy", "acoustic",
+    # Document types
+    "ifc file", "revit", "cad", "dwg", "rvt", "nwd",
+}
+
+# Off-topic / dangerous patterns to reject
+OFF_TOPIC_PATTERNS = [
+    r"\b(hack|exploit|bypass|inject|overflow)\b",
+    r"\b(password|credential|api.?key|secret)\b",
+    r"\b(porn|nude|xxx|nsfw)\b",
+    r"\b(weapon|bomb|explosive|drug)\b",
+    r"\b(stock|invest|crypto|bitcoin|forex)\b",
+    r"\b(medical|diagnos|prescri|symptom|disease)\b",
+    r"\b(legal|lawsuit|attorney|sue)\b",
+]
+
+
+def _check_topic_guardrails(user_input: str) -> tuple[bool, str]:
+    """Check if user input is within BIM/construction domain.
+
+    Returns:
+        Tuple of (is_valid, reason)
+        - is_valid: True if on-topic and safe
+        - reason: Explanation of why blocked (if blocked)
+    """
+    text = (user_input or "").strip().lower()
+
+    # Check for off-topic/dangerous patterns first
+    for pattern in OFF_TOPIC_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
+            return False, "Request appears to be off-topic or contains restricted content."
+
+    # Check if any BIM domain keywords present
+    has_domain_keyword = any(kw in text for kw in BIM_DOMAIN_KEYWORDS)
+
+    # Allow generic questions about the system itself
+    system_meta_patterns = [
+        r"\b(help|assist|what can|how do|capabilities)\b",
+        r"\b(hello|hi|hey|thanks|thank you)\b",
+    ]
+    is_system_meta = any(re.search(p, text) for p in system_meta_patterns)
+
+    if has_domain_keyword or is_system_meta:
+        return True, "On-topic: BIM/construction domain or system interaction."
+
+    # Short inputs (< 10 chars) are ambiguous, allow them
+    if len(text) < 10:
+        return True, "Input too short to classify; allowing."
+
+    return False, (
+        "Request does not appear to be related to BIM, building information, "
+        "or construction data. Please ask about IFC models, point clouds, "
+        "building elements, or spatial queries."
+    )
+
+
+# ============================================================================
 # Router Agent
 # ============================================================================
 
@@ -204,6 +302,29 @@ async def router_agent_node(state: AgentState) -> AgentState:
     messages = list(state.get("messages", []))
     
     try:
+        # Step 1: Topic guardrails check
+        is_on_topic, guardrail_reason = _check_topic_guardrails(user_input)
+        
+        if not is_on_topic:
+            logger.warning("Router: Topic guardrail blocked request - %s", guardrail_reason)
+            return {
+                **state,
+                "intent": "blocked",
+                "router_reasoning": f"Guardrail: {guardrail_reason}",
+                "messages": messages + [
+                    AIMessage(content=(
+                        f"I can only help with BIM and construction-related queries. {guardrail_reason}\n\n"
+                        "Examples of things I can help with:\n"
+                        "- 'Show all walls with fire rating > 60 minutes'\n"
+                        "- 'Find spaces on Floor 2'\n"
+                        "- 'Upload IFC file for analysis'\n"
+                        "- 'Segment this point cloud'"
+                    ))
+                ],
+                "next": END,
+            }
+        
+        # Step 2: Classify intent
         intent, reasoning = _classify_intent(user_input)
         logger.info("Router classified intent: %s - %s", intent, reasoning)
         
@@ -232,38 +353,69 @@ async def router_agent_node(state: AgentState) -> AgentState:
 
 
 # ============================================================================
-# Planning Agent (Placeholder)
+# Executor Agent Node (for HITL execution)
 # ============================================================================
 
-async def planning_agent_node(state: AgentState) -> AgentState:
+async def executor_agent_node(state: AgentState) -> AgentState:
     """
-    Planning Agent: Handle multi-step workflows
-    
-    Responsibilities:
-    - Break down complex tasks
-    - Create execution plans
-    - Coordinate specialist agents
-    - Track progress
-    
-    Uses task decomposition and recursive planning.
-    
+    Executor Agent: Execute approved action plans
+
+    This node is invoked after HITL approval to execute pending actions.
+    It receives the approved action plan from state metadata and executes it.
+
     Args:
-        state: Current agent state
-    
+        state: Current agent state with approved action plan
+
     Returns:
-        Updated state with plan and execution steps
+        Updated state with execution results
     """
-    logger.info("Planning Agent: Creating execution plan")
-    
-    # Planning logic not implemented yet.
-    
-    return {
-        **state,
-        "messages": list(state.get("messages", [])) + [
-            AIMessage(content="[Planning Agent] Placeholder - Implementation pending")
-        ],
-        "next": END
-    }
+    logger.info("Executor Agent: Executing approved action")
+
+    if _executor_agent is None:
+        return {
+            **state,
+            "messages": list(state.get("messages", [])) + [
+                AIMessage(content="[Executor] Error: Executor agent not available")
+            ],
+            "error": "Executor agent not available",
+            "next": END,
+        }
+
+    metadata = state.get("metadata", {}) or {}
+    action_plan = metadata.get("action_plan")
+
+    if not action_plan:
+        return {
+            **state,
+            "messages": list(state.get("messages", [])) + [
+                AIMessage(content="[Executor] No action plan found in state to execute")
+            ],
+            "next": END,
+        }
+
+    try:
+        results = await _executor_agent.execute(action_plan, metadata=metadata)
+
+        response = f"Action executed successfully. Results: {len(results)} operation(s) completed."
+        return {
+            **state,
+            "mcp_results": results,
+            "messages": list(state.get("messages", [])) + [
+                AIMessage(content=response)
+            ],
+            "next": END,
+        }
+
+    except Exception as e:  # pylint: disable=broad-except
+        logger.exception("Executor agent error")
+        return {
+            **state,
+            "error": str(e),
+            "messages": list(state.get("messages", [])) + [
+                AIMessage(content=f"[Executor] Execution failed: {str(e)}")
+            ],
+            "next": "error_handler",
+        }
 
 
 # ============================================================================
@@ -339,7 +491,11 @@ def create_agent_graph() -> Any:
     Create LangGraph state machine for agent orchestration
     
     Graph structure:
-        START → Router → [Query|Action|Planning|Unknown] → END
+        START → Router → [Query|Action|Planning|Executor|Unknown] → END
+                              ↓
+                         (HITL approval flow)
+                              ↓
+                         Executor → END
     
     Checkpointing:
         - Redis if available (production)
@@ -358,6 +514,7 @@ def create_agent_graph() -> Any:
     graph.add_node("query_agent", query_agent_node)
     graph.add_node("action_agent", action_agent_node)
     graph.add_node("planning_agent", planning_agent_node)
+    graph.add_node("executor_agent", executor_agent_node)
     graph.add_node("unknown_agent", unknown_handler_node)
     graph.add_node("error_handler", error_handler_node)
     
@@ -378,15 +535,35 @@ def create_agent_graph() -> Any:
             "query_agent": "query_agent",
             "action_agent": "action_agent",
             "planning_agent": "planning_agent",
+            "executor_agent": "executor_agent",
             "unknown_agent": "unknown_agent",
             "error_handler": "error_handler"
         }
     )
     
-    # All specialist agents route to END
+    # Action agent can route to executor (after HITL) or END
+    def route_from_action(state: AgentState) -> str:
+        """Route from action agent - may go to executor or end"""
+        next_node = state.get("next", END)
+        # If requires approval, action agent returns END (wait for HITL)
+        # If no approval needed and already executed, also END
+        if next_node == "executor_agent":
+            return "executor_agent"
+        return END
+    
+    graph.add_conditional_edges(
+        "action_agent",
+        route_from_action,
+        {
+            "executor_agent": "executor_agent",
+            END: END
+        }
+    )
+    
+    # Other specialist agents route to END
     graph.add_edge("query_agent", END)
-    graph.add_edge("action_agent", END)
     graph.add_edge("planning_agent", END)
+    graph.add_edge("executor_agent", END)
     graph.add_edge("unknown_agent", END)
     graph.add_edge("error_handler", END)
     
@@ -510,6 +687,66 @@ class AgentOrchestrator:
                 "intent": "error",
                 "thread_id": thread_id,
                 "success": False
+            }
+
+    async def execute_approved_action(
+        self,
+        action_plan: Dict[str, Any],
+        thread_id: str = "default",
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Execute an approved action plan directly (post-HITL)
+        
+        This method bypasses the router and directly invokes the executor
+        for actions that have already been approved via HITL.
+        
+        Args:
+            action_plan: The approved action plan to execute
+            thread_id: Conversation thread ID for checkpointing
+            metadata: Additional context (user_id, approved_by, etc.)
+        
+        Returns:
+            Dict with execution results
+        """
+        logger.info("Executing approved action: %s", action_plan.get("action_type"))
+        
+        # Build state with approved action plan
+        initial_state: AgentState = {
+            "messages": [HumanMessage(content=f"Execute approved action: {action_plan.get('action_type')}")],
+            "user_input": f"[HITL-APPROVED] Execute {action_plan.get('action_type')}",
+            "intent": "executor",
+            "metadata": {
+                **(metadata or {}),
+                "action_plan": action_plan,
+                "timestamp": datetime.now().isoformat(),
+                "thread_id": thread_id,
+                "hitl_approved": True
+            },
+            "next": "executor_agent"  # Skip router, go directly to executor
+        }
+        
+        # Create a minimal graph that just runs the executor
+        try:
+            # Run executor directly
+            result_state = await executor_agent_node(initial_state)
+            
+            messages = result_state.get("messages", [])
+            response = messages[-1].content if messages else "Execution completed"
+            
+            return {
+                "response": response,
+                "success": "error" not in result_state,
+                "mcp_results": result_state.get("mcp_results", []),
+                "thread_id": thread_id
+            }
+            
+        except Exception as e:  # pylint: disable=broad-except
+            logger.exception("Execute approved action error")
+            return {
+                "response": f"Execution failed: {str(e)}",
+                "success": False,
+                "thread_id": thread_id
             }
 
 

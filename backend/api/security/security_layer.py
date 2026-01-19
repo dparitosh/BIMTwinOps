@@ -87,10 +87,14 @@ class InputValidator:
         r"(UNION\s+SELECT|DROP\s+TABLE|EXEC\s+)",  # SQL commands
     ]
     
+    # Cypher injection - only flag actual Cypher syntax, not natural language
+    # e.g. "CREATE (n:Node)" is suspicious, but "create a wall" is normal
     CYPHER_INJECTION_PATTERNS = [
-        r"(CREATE|MERGE|DELETE|SET|REMOVE|DROP)\s+",
-        r"(CALL\s+dbms|CALL\s+apoc)",
+        r"(CREATE|MERGE|DELETE|SET|REMOVE|DROP)\s*\(",  # Cypher with parenthesis
+        r"(CREATE|MERGE|DELETE)\s+\([a-z]+:",  # CREATE (n:Label)
+        r"(CALL\s+dbms|CALL\s+apoc)",  # Stored procedures
         r"(\}\s*-\[\s*:\s*MATCH)",  # Pattern injection
+        r"MATCH\s*\([^)]+\)\s*-",  # MATCH pattern syntax
     ]
     
     XSS_PATTERNS = [

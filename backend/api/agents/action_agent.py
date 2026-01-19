@@ -108,7 +108,45 @@ class ActionAgent:
         self.pending_store = get_pending_action_store()
         self.executor = ExecutorAgent()
 
+        # Import GenUI component generator
+        try:
+            from ..generative_ui.ui_generator import ComponentGenerator
+            self.ui_generator = ComponentGenerator()
+        except ImportError:
+            self.ui_generator = None
+
         logger.info("ActionAgent initialized")
+
+    def _generate_approval_ui(self, pending_id: str, action_plan: Dict[str, Any]) -> Dict[str, Any] | None:
+        """Generate a GenUI approval component for HITL flow."""
+        if self.ui_generator is None:
+            return None
+        
+        action_type = action_plan.get("action_type", "unknown")
+        tool = action_plan.get("tool", "unknown")
+        bulk_estimate = action_plan.get("bulk_estimate")
+        warnings = action_plan.get("warnings", [])
+        
+        # Build description based on action type
+        if action_type == "delete":
+            description = f"Delete operation via {tool}"
+        elif "update" in action_type:
+            description = f"Update operation via {tool}"
+            if bulk_estimate and bulk_estimate > 5:
+                description += f" (affects ~{bulk_estimate} items)"
+        else:
+            description = f"{action_type} via {tool}"
+        
+        component = self.ui_generator.create_approval(
+            pending_action_id=pending_id,
+            action_type=action_type,
+            description=description,
+            details=action_plan.get("parameters", {}),
+            warnings=warnings,
+            bulk_count=bulk_estimate
+        )
+        
+        return self.ui_generator.to_dict(component)
     
     async def process(self, state: AgentState) -> AgentState:
         """
@@ -170,6 +208,12 @@ class ActionAgent:
                         session_id=meta.get("session_id"),
                     )
 
+                # Generate GenUI approval component
+                approval_ui = self._generate_approval_ui(
+                    pending_id=pending.id,
+                    action_plan=action_plan
+                )
+
                 response = (
                     "This action requires approval before it can be executed. "
                     f"Pending action id: {pending.id}. "
@@ -184,6 +228,7 @@ class ActionAgent:
                         "action_plan": action_plan,
                         "pending_action_id": pending.id,
                         "requires_approval": True,
+                        "ui_component": approval_ui,
                     },
                     "next": "END",
                 }

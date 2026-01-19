@@ -54,6 +54,7 @@ class ComponentType(str, Enum):
     ALERT = "alert"
     LOADING = "loading"
     ERROR = "error"
+    APPROVAL = "approval"  # HITL approval component
 
 
 class ChartType(str, Enum):
@@ -116,6 +117,23 @@ class PropertyPanelComponent(BaseModel):
         "properties": [],
         "editable": False,
         "grouped": True
+    })
+
+
+class ApprovalComponent(BaseModel):
+    """HITL Approval component specification for destructive/bulk actions"""
+    id: str
+    type: Literal[ComponentType.APPROVAL] = ComponentType.APPROVAL
+    props: Dict[str, Any] = Field(default_factory=lambda: {
+        "pending_action_id": "",
+        "action_type": "",
+        "description": "",
+        "details": {},
+        "warnings": [],
+        "bulk_count": None,
+        "approve_url": "/api/approvals/{id}/approve",
+        "reject_url": "/api/approvals/{id}/reject",
+        "show_details": True
     })
 
 
@@ -357,6 +375,56 @@ class ComponentGenerator:
             },
             metadata={
                 "created_at": datetime.now().isoformat()
+            }
+        )
+
+    def create_approval(
+        self,
+        pending_action_id: str,
+        action_type: str,
+        description: str,
+        details: Optional[Dict[str, Any]] = None,
+        warnings: Optional[List[str]] = None,
+        bulk_count: Optional[int] = None
+    ) -> UIComponent:
+        """
+        Create HITL approval component for destructive/bulk actions
+        
+        This component renders an approval dialog that allows users to
+        review and approve/reject pending actions before execution.
+        
+        Args:
+            pending_action_id: ID of the pending action in the approval store
+            action_type: Type of action (delete, bulk_update, etc.)
+            description: Human-readable description of the action
+            details: Additional action details to display
+            warnings: Warning messages to show
+            bulk_count: Number of items affected (for bulk operations)
+        
+        Returns:
+            UIComponent for HITL approval dialog
+        """
+        component_id = self._generate_id("approval")
+        
+        return UIComponent(
+            id=component_id,
+            type=ComponentType.APPROVAL,
+            props={
+                "pending_action_id": pending_action_id,
+                "action_type": action_type,
+                "description": description,
+                "details": details or {},
+                "warnings": warnings or [],
+                "bulk_count": bulk_count,
+                "approve_url": f"/api/approvals/{pending_action_id}/approve",
+                "reject_url": f"/api/approvals/{pending_action_id}/reject",
+                "show_details": bool(details)
+            },
+            metadata={
+                "created_at": datetime.now().isoformat(),
+                "requires_approval": True,
+                "is_destructive": action_type in ("delete", "drop", "remove"),
+                "is_bulk": bulk_count is not None and bulk_count > 1
             }
         )
     

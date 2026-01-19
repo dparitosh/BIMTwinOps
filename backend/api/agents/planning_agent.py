@@ -165,11 +165,11 @@ class PlanningAgent:
         
         # Audit log
         if self.audit_logger:
-            self.audit_logger.log_event(
-                event_type=AuditEventType.USER_INPUT,
-                action="workflow_planning",
-                status="started",
-                details={"user_input": user_input}
+            self.audit_logger.log_agent_action(
+                agent_name="planning_agent",
+                action="workflow_planning_started",
+                intent="planning",
+                result="started"
             )
         
         try:
@@ -184,11 +184,11 @@ class PlanningAgent:
             
             # Audit log success
             if self.audit_logger:
-                self.audit_logger.log_event(
-                    event_type=AuditEventType.AGENT_ACTION,
+                self.audit_logger.log_agent_action(
+                    agent_name="planning_agent",
                     action="workflow_completed",
-                    status="success",
-                    details={"task_count": len(tasks)}
+                    intent="planning",
+                    result=f"success: {len(tasks)} tasks"
                 )
             
             # Update state
@@ -202,11 +202,11 @@ class PlanningAgent:
             logger.error(f"Workflow execution failed: {str(e)}")
             
             if self.audit_logger:
-                self.audit_logger.log_event(
-                    event_type=AuditEventType.ERROR,
+                self.audit_logger.log_agent_action(
+                    agent_name="planning_agent",
                     action="workflow_failed",
-                    status="error",
-                    details={"error": str(e)}
+                    intent="planning",
+                    result=f"error: {str(e)}"
                 )
             
             state["planning_response"] = f"Workflow failed: {str(e)}"

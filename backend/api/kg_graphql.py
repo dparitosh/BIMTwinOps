@@ -119,6 +119,33 @@ class BsddClass:
             ))
         return relations
 
+    @strawberry.field
+    def class_properties(self) -> List["BsddClassProperty"]:
+        """Get properties with class-specific context (required, defaults, etc.)"""
+        kg = get_kg_schema()
+        query = """
+        MATCH (c:BsddClass {uri: $uri})-[r:HAS_PROPERTY]->(p:BsddProperty)
+        RETURN p, r
+        """
+        result = kg.execute_query(query, {"uri": self.uri})
+        class_props = []
+        for record in result:
+            prop_data = dict(record["p"])
+            rel_data = dict(record["r"]) if record.get("r") else {}
+            class_props.append(BsddClassProperty(
+                property_uri=prop_data.get("uri", ""),
+                property_name=prop_data.get("name", ""),
+                property_code=prop_data.get("code", ""),
+                is_required=rel_data.get("isRequired", False),
+                is_required_for_exchange=rel_data.get("isRequiredForExchange", False),
+                property_set=rel_data.get("propertySet"),
+                predefined_value=rel_data.get("predefinedValue"),
+                min_value=rel_data.get("minValue"),
+                max_value=rel_data.get("maxValue"),
+                pattern=rel_data.get("pattern")
+            ))
+        return class_props
+
 
 @strawberry.type
 class BsddProperty:
@@ -153,6 +180,107 @@ class BsddProperty:
                 synonyms=class_data.get("synonyms", [])
             ))
         return classes
+
+    @strawberry.field
+    def allowed_values(self) -> List["BsddAllowedValue"]:
+        """Get allowed values for this property"""
+        kg = get_kg_schema()
+        query = """
+        MATCH (p:BsddProperty {uri: $uri})-[:HAS_ALLOWED_VALUE]->(av:BsddAllowedValue)
+        RETURN av
+        """
+        result = kg.execute_query(query, {"uri": self.uri})
+        values = []
+        for record in result:
+            av_data = dict(record["av"])
+            values.append(BsddAllowedValue(
+                uri=av_data.get("uri", ""),
+                value=av_data.get("value", ""),
+                code=av_data.get("code"),
+                description=av_data.get("description"),
+                sort_number=av_data.get("sortNumber")
+            ))
+        return values
+
+    @strawberry.field
+    def unit(self) -> Optional["BsddUnit"]:
+        """Get the unit for this property"""
+        kg = get_kg_schema()
+        query = """
+        MATCH (p:BsddProperty {uri: $uri})-[:HAS_UNIT]->(u:BsddUnit)
+        RETURN u LIMIT 1
+        """
+        result = kg.execute_query(query, {"uri": self.uri})
+        if result:
+            u_data = dict(result[0]["u"])
+            return BsddUnit(
+                uri=u_data.get("uri", ""),
+                code=u_data.get("code", ""),
+                name=u_data.get("name", ""),
+                symbol=u_data.get("symbol")
+            )
+        return None
+
+
+@strawberry.type
+class BsddAllowedValue:
+    """bSDD Allowed Value for enumerated properties"""
+    uri: str
+    value: str
+    code: Optional[str] = None
+    description: Optional[str] = None
+    sort_number: Optional[int] = None
+
+
+@strawberry.type
+class BsddUnit:
+    """bSDD Unit of measurement"""
+    uri: str
+    code: str
+    name: str
+    symbol: Optional[str] = None
+
+
+@strawberry.type
+class BsddClassProperty:
+    """bSDD Class-Property relationship with contextual metadata
+    
+    This represents the association between a class and a property,
+    including context-specific attributes like whether it's required,
+    default values, and allowed values specific to this class context.
+    """
+    property_uri: str
+    property_name: str
+    property_code: str
+    is_required: bool = False
+    is_required_for_exchange: bool = False
+    property_set: Optional[str] = None
+    predefined_value: Optional[str] = None
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+    pattern: Optional[str] = None
+    
+    @strawberry.field
+    def property_details(self) -> Optional[BsddProperty]:
+        """Get the full property details"""
+        kg = get_kg_schema()
+        query = """
+        MATCH (p:BsddProperty {uri: $uri})
+        RETURN p
+        """
+        result = kg.execute_query(query, {"uri": self.property_uri})
+        if result:
+            prop_data = dict(result[0]["p"])
+            return BsddProperty(
+                uri=prop_data.get("uri", ""),
+                code=prop_data.get("code", ""),
+                name=prop_data.get("name", ""),
+                definition=prop_data.get("definition"),
+                data_type=prop_data.get("dataType"),
+                units=prop_data.get("units", []),
+                physical_quantity=prop_data.get("physicalQuantity")
+            )
+        return None
 
 
 @strawberry.type
@@ -249,6 +377,13 @@ class ClassRelation:
 
 
 @strawberry.type
+class NodeTypeCount:
+    """Count of nodes by type - used for GraphStats distribution"""
+    node_type: str
+    count: int
+
+
+@strawberry.type
 class GraphStats:
     """Knowledge graph statistics"""
     total_nodes: int
@@ -258,7 +393,7 @@ class GraphStats:
     bsdd_properties_count: int
     ifc_elements_count: int
     point_cloud_segments_count: int
-    node_type_distribution: Dict[str, int]
+    node_type_distribution: List[NodeTypeCount]
 
 
 @strawberry.type
@@ -475,6 +610,67 @@ class Query:
         return properties
     
     @strawberry.field
+    def bsdd_allowed_values(
+        self,
+        property_uri: str,
+        limit: Optional[int] = 100
+    ) -> List[BsddAllowedValue]:
+        """Get allowed values for a specific bSDD property"""
+        kg = get_kg_schema()
+        query = """
+        MATCH (p:BsddProperty {uri: $property_uri})-[:HAS_ALLOWED_VALUE]->(av:BsddAllowedValue)
+        RETURN av
+        ORDER BY av.sortNumber, av.value
+        LIMIT $limit
+        """
+        result = kg.execute_query(query, {"property_uri": property_uri, "limit": limit})
+        
+        values = []
+        for record in result:
+            av_data = dict(record["av"])
+            values.append(BsddAllowedValue(
+                uri=av_data.get("uri", ""),
+                value=av_data.get("value", ""),
+                code=av_data.get("code"),
+                description=av_data.get("description"),
+                sort_number=av_data.get("sortNumber")
+            ))
+        return values
+    
+    @strawberry.field
+    def bsdd_units(
+        self,
+        search_text: Optional[str] = None,
+        limit: Optional[int] = 100
+    ) -> List[BsddUnit]:
+        """Search bSDD units of measurement"""
+        kg = get_kg_schema()
+        
+        where_clause = ""
+        if search_text:
+            where_clause = "WHERE u.name CONTAINS $search_text OR u.code CONTAINS $search_text OR u.symbol CONTAINS $search_text"
+        
+        query = f"""
+        MATCH (u:BsddUnit)
+        {where_clause}
+        RETURN u
+        ORDER BY u.name
+        LIMIT $limit
+        """
+        result = kg.execute_query(query, {"search_text": search_text, "limit": limit})
+        
+        units = []
+        for record in result:
+            u_data = dict(record["u"])
+            units.append(BsddUnit(
+                uri=u_data.get("uri", ""),
+                code=u_data.get("code", ""),
+                name=u_data.get("name", ""),
+                symbol=u_data.get("symbol")
+            ))
+        return units
+    
+    @strawberry.field
     def ifc_element(self, global_id: str) -> Optional[IfcElement]:
         """Get a specific IFC element by GlobalId"""
         kg = get_kg_schema()
@@ -650,13 +846,13 @@ class Query:
                 bsdd_properties_count=counts.get("propCount", 0),
                 ifc_elements_count=counts.get("ifcCount", 0),
                 point_cloud_segments_count=counts.get("segCount", 0),
-                node_type_distribution={
-                    "BsddDictionary": counts.get("dictCount", 0),
-                    "BsddClass": counts.get("classCount", 0),
-                    "BsddProperty": counts.get("propCount", 0),
-                    "IfcElement": counts.get("ifcCount", 0),
-                    "PointCloudSegment": counts.get("segCount", 0)
-                }
+                node_type_distribution=[
+                    NodeTypeCount(node_type="BsddDictionary", count=counts.get("dictCount", 0)),
+                    NodeTypeCount(node_type="BsddClass", count=counts.get("classCount", 0)),
+                    NodeTypeCount(node_type="BsddProperty", count=counts.get("propCount", 0)),
+                    NodeTypeCount(node_type="IfcElement", count=counts.get("ifcCount", 0)),
+                    NodeTypeCount(node_type="PointCloudSegment", count=counts.get("segCount", 0))
+                ]
             )
         
         return GraphStats(
@@ -667,7 +863,7 @@ class Query:
             bsdd_properties_count=0,
             ifc_elements_count=0,
             point_cloud_segments_count=0,
-            node_type_distribution={}
+            node_type_distribution=[]
         )
 
 

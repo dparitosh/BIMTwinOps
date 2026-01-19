@@ -133,7 +133,10 @@ class MCPConnectionPool:
     
     async def connect(self, server_name: str) -> bool:
         """
-        Establish connection to an MCP server
+        Establish connection to an MCP server and discover tools.
+        
+        Note: The session is opened, tools discovered, then closed. 
+        Actual tool calls will open a fresh session.
         
         Args:
             server_name: Name of the server to connect to
@@ -147,7 +150,7 @@ class MCPConnectionPool:
         
         connection = self.connections[server_name]
         
-        if connection.is_connected:
+        if connection.is_connected and connection.tools:
             logger.debug(f"Server {server_name} already connected")
             return True
         
@@ -158,7 +161,7 @@ class MCPConnectionPool:
                 env=connection.config.env
             )
             
-            # Create client session
+            # Create client session to discover tools
             async with stdio_client(server_params) as (read, write):
                 async with ClientSession(read, write) as session:
                     # Initialize connection
@@ -168,7 +171,7 @@ class MCPConnectionPool:
                     tools_result = await session.list_tools()
                     connection.tools = tools_result.tools
                     
-                    connection.session = session
+                    # Mark as connected (tools discovered)
                     connection.is_connected = True
                     connection.retry_count = 0
                     
@@ -255,6 +258,8 @@ class MCPConnectionPool:
         """
         Call a tool on a specific MCP server
         
+        Creates a fresh session for each call to avoid ClosedResourceError.
+        
         Args:
             server_name: Name of the server
             tool_name: Name of the tool to call
@@ -272,8 +277,8 @@ class MCPConnectionPool:
         
         connection = self.connections[server_name]
         
-        # Ensure connection is established
-        if not connection.is_connected:
+        # Ensure tools are discovered
+        if not connection.tools:
             success = await self.connect(server_name)
             if not success:
                 raise RuntimeError(f"Failed to connect to {server_name}")
@@ -287,10 +292,19 @@ class MCPConnectionPool:
             )
         
         try:
-            # Call the tool
-            result = await connection.session.call_tool(tool_name, arguments)
-            logger.info(f"Called {server_name}.{tool_name} successfully")
-            return result
+            # Create fresh session for this call
+            server_params = StdioServerParameters(
+                command=connection.config.command,
+                args=connection.config.args,
+                env=connection.config.env
+            )
+            
+            async with stdio_client(server_params) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    result = await session.call_tool(tool_name, arguments)
+                    logger.info(f"Called {server_name}.{tool_name} successfully")
+                    return result
             
         except Exception as e:
             logger.error(f"Error calling {server_name}.{tool_name}: {str(e)}", exc_info=True)
@@ -450,10 +464,17 @@ async def get_mcp_host() -> MCPHost:
     Returns:
         Global MCPHost instance
     """
+    import os
+    
     global _mcp_host
     
     if _mcp_host is None:
         _mcp_host = MCPHost(pool_size=10)
+        
+        # Get credentials from environment
+        neo4j_password = os.getenv("NEO4J_PASSWORD", "")
+        neo4j_user = os.getenv("NEO4J_USER", "neo4j")
+        neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
         
         # Default configurations (will be loaded from env/config in production)
         configs = [
@@ -462,7 +483,11 @@ async def get_mcp_host() -> MCPHost:
                 type=MCPServerType.NEO4J,
                 command="python",
                 args=["-m", "api.mcp_servers.neo4j"],
-                env={"NEO4J_URI": "bolt://localhost:7687"}
+                env={
+                    "NEO4J_URI": neo4j_uri,
+                    "NEO4J_USER": neo4j_user,
+                    "NEO4J_PASSWORD": neo4j_password,
+                }
             ),
             MCPServerConfig(
                 name="basex",

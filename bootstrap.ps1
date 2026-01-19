@@ -180,5 +180,7 @@ Write-Host "======================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Edit backend/.env with your credentials (optional)" -ForegroundColor White
-Write-Host "  2. Run: .\start-all.ps1" -ForegroundColor White
+Write-Host "  2. Initialize Neo4j schema (if using Neo4j):" -ForegroundColor White
+Write-Host "       python backend/scripts/init_neo4j_schema.py --seed" -ForegroundColor Gray
+Write-Host "  3. Run: .\start-all.ps1" -ForegroundColor White
 Write-Host ""
