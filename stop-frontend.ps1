@@ -3,22 +3,26 @@
   Stop BIMTwinOps frontend server
 
 .DESCRIPTION
-  Stops the Vite dev server running on port 5173
+  Stops the Vite dev server (default port: 5173)
 
 .EXAMPLE
   .\stop-frontend.ps1
 #>
 
 $ErrorActionPreference = 'SilentlyContinue'
+$root = $PSScriptRoot
+
+# Frontend port (can be overridden via FRONTEND_PORT env var)
+$frontendPort = if ($env:FRONTEND_PORT) { [int]$env:FRONTEND_PORT } else { 5173 }
 
 Write-Host ""
-Write-Host "Stopping BIMTwinOps Frontend..." -ForegroundColor Yellow
+Write-Host "Stopping BIMTwinOps Frontend (port $frontendPort)..." -ForegroundColor Yellow
 Write-Host ""
 
 $stopped = $false
 
-# Find process on port 5173
-$procs = Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue | 
+# Find process on configured port
+$procs = Get-NetTCPConnection -LocalPort $frontendPort -State Listen -ErrorAction SilentlyContinue | 
   Select-Object -ExpandProperty OwningProcess -Unique
 
 foreach ($procId in $procs) {

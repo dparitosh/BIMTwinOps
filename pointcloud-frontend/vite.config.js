@@ -6,11 +6,12 @@ export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), '');
 	const backendUrl = env.VITE_BACKEND_API_URL || 'http://127.0.0.1:8000';
 	const apsUrl = env.VITE_APS_API_URL || 'http://127.0.0.1:3001';
+	const frontendPort = parseInt(env.VITE_FRONTEND_PORT || env.FRONTEND_PORT || '5173', 10);
 
 	return {
 		plugins: [react(), tailwindcss()],
 		server: {
-			port: 5173,
+			port: frontendPort,
 			strictPort: true,
 			proxy: {
 				// Proxy /api requests to backend (FastAPI)

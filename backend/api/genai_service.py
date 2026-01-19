@@ -26,7 +26,7 @@ class BIMTwinOpsGenAI:
         deployment_name: str = "gpt-4o",
         neo4j_uri: str = "bolt://localhost:7687",
         neo4j_user: str = "neo4j",
-        neo4j_password: str = "password"
+        neo4j_password: Optional[str] = None
     ):
         """
         Initialize GenAI service
@@ -46,6 +46,13 @@ class BIMTwinOpsGenAI:
             api_version=azure_api_version
         )
         self.deployment = deployment_name
+        
+        # Validate Neo4j password is provided
+        if not neo4j_password:
+            neo4j_password = os.getenv("NEO4J_PASSWORD")
+        if not neo4j_password:
+            raise ValueError("neo4j_password is required - set NEO4J_PASSWORD env var or pass explicitly")
+        
         self.neo4j_driver = GraphDatabase.driver(
             neo4j_uri,
             auth=(neo4j_user, neo4j_password)

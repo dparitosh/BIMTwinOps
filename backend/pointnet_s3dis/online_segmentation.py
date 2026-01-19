@@ -17,7 +17,7 @@ LABEL_MAP = {
 
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "tcs12345")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")  # Required - no default for security
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -32,11 +32,14 @@ def get_model():
         model = PointNetSegmentation(num_classes=13, feature_transform=True).to(device)
 
         here = os.path.dirname(os.path.abspath(__file__))
-        model_path = os.path.join(here, "best_pointnet_s3dis.pth")
+        # Try checkpoints folder first, then root folder
+        model_path = os.path.join(here, "checkpoints", "best_pointnet_s3dis.pth")
+        if not os.path.isfile(model_path):
+            model_path = os.path.join(here, "best_pointnet_s3dis.pth")
         if not os.path.isfile(model_path):
             raise FileNotFoundError(f"Cannot find model at {model_path}")
 
-        state = torch.load(model_path, map_location=device)
+        state = torch.load(model_path, map_location=device, weights_only=True)
         model.load_state_dict(state)
         model.eval()
         _model = model
@@ -201,7 +204,7 @@ def build_segments(points_xyz, labels):
 
 # ----------------------- 5. Neo4j writing ----------------------
 
-def write_scene_to_neo4j(scene_id, segments, edges, uri=NEO4J_URI, user=NEO4J_USER, password=NEO4J_PASSWORD, create_near_relationships=True):
+def write_scene_to_neo4j(scene_id, segments, edges, uri=NEO4J_URI, user=NEO4J_USER, password=None, create_near_relationships=True):
     """
     Writes segments to Neo4j with spatial properties:
       - seg.centroid_point  => Neo4j point({x,y,z})
@@ -210,6 +213,10 @@ def write_scene_to_neo4j(scene_id, segments, edges, uri=NEO4J_URI, user=NEO4J_US
       - seg.bbox_center     => Neo4j point({x,y,z})
     Optionally creates NEAR relationships using edges list.
     """
+    password = password or NEO4J_PASSWORD
+    if not password:
+        raise ValueError("NEO4J_PASSWORD environment variable is required")
+    
     driver = GraphDatabase.driver(uri, auth=(user, password))
     with driver.session() as session:
         session.run("MERGE (sc:Scene {id: $id})", id=scene_id)

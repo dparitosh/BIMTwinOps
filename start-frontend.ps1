@@ -3,7 +3,7 @@
   Start BIMTwinOps React frontend
 
 .DESCRIPTION
-  Checks configuration and runs Vite development server on port 5173
+  Checks configuration and runs Vite development server (default port: 5173)
 
 .EXAMPLE
   .\start-frontend.ps1
@@ -11,6 +11,7 @@
 
 .NOTES
   Run bootstrap.ps1 first if node_modules doesn't exist
+  Set FRONTEND_PORT env var to override default port
 #>
 
 Param(
@@ -62,6 +63,9 @@ Write-Host "[OK] node_modules: Found" -ForegroundColor Green
 Write-Host ""
 Write-Host "--- Configuration ---" -ForegroundColor Cyan
 
+# Frontend port (can be overridden via FRONTEND_PORT env var)
+$frontendPort = if ($env:FRONTEND_PORT) { [int]$env:FRONTEND_PORT } else { 5173 }
+
 $apiBaseUrl = "http://localhost:8000"
 $apsServiceUrl = "http://localhost:3001"
 
@@ -90,14 +94,14 @@ if (-not $SkipChecks) {
   Write-Host ""
   Write-Host "--- Connection Checks ---" -ForegroundColor Cyan
   
-  # Check if port 5173 is available
-  $portInUse = Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue
+  # Check if frontend port is available
+  $portInUse = Get-NetTCPConnection -LocalPort $frontendPort -State Listen -ErrorAction SilentlyContinue
   if ($portInUse) {
-    Write-Host "[X] Port 5173: IN USE (PID: $($portInUse.OwningProcess))" -ForegroundColor Red
+    Write-Host "[X] Port ${frontendPort}: IN USE (PID: $($portInUse.OwningProcess))" -ForegroundColor Red
     Write-Host "    Run .\stop-frontend.ps1 first" -ForegroundColor Yellow
     exit 1
   } else {
-    Write-Host "[OK] Port 5173: Available" -ForegroundColor Green
+    Write-Host "[OK] Port ${frontendPort}: Available" -ForegroundColor Green
   }
   
   # Check Backend API connection
@@ -128,9 +132,14 @@ Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Starting Vite Dev Server" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  URL: http://localhost:5173" -ForegroundColor White
+Write-Host "  URL: http://localhost:$frontendPort" -ForegroundColor White
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Press Ctrl+C to stop" -ForegroundColor Yellow
 Write-Host ""
 
-npm run dev
+# Pass port to Vite if non-default
+if ($frontendPort -ne 5173) {
+  npm run dev -- --port $frontendPort
+} else {
+  npm run dev
+}

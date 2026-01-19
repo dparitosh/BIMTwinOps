@@ -3,22 +3,31 @@
   Stop BIMTwinOps backend server
 
 .DESCRIPTION
-  Stops the FastAPI/Uvicorn server running on port 8000
+  Stops the FastAPI/Uvicorn server (reads port from backend/.env)
 
 .EXAMPLE
   .\stop-backend.ps1
 #>
 
 $ErrorActionPreference = 'SilentlyContinue'
+$root = $PSScriptRoot
+
+# Read port from .env (default: 8000)
+$backendPort = 8000
+$envFile = [IO.Path]::Combine($root, 'backend', '.env')
+if (Test-Path $envFile) {
+  $content = Get-Content $envFile -Raw
+  if ($content -match "BACKEND_PORT\s*=\s*(\d+)") { $backendPort = [int]$Matches[1] }
+}
 
 Write-Host ""
-Write-Host "Stopping BIMTwinOps Backend..." -ForegroundColor Yellow
+Write-Host "Stopping BIMTwinOps Backend (port $backendPort)..." -ForegroundColor Yellow
 Write-Host ""
 
 $stopped = $false
 
-# Find process on port 8000
-$procs = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | 
+# Find process on configured port
+$procs = Get-NetTCPConnection -LocalPort $backendPort -State Listen -ErrorAction SilentlyContinue | 
   Select-Object -ExpandProperty OwningProcess -Unique
 
 foreach ($procId in $procs) {

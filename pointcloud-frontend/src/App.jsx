@@ -404,7 +404,7 @@ function UnifiedBimViewer({ apsBaseUrl, viewerUrn, setViewerUrn, viewerAuth, set
       </div>
 
       {/* Main layout with collapsible panels */}
-      <div className="flex gap-4" style={{ height: "calc(75vh - 100px)" }}>
+      <div className="flex gap-4" style={{ height: "calc(100vh - 280px)", minHeight: "500px" }}>
         {/* Left Panel: File Management */}
         {leftPanelOpen && (
           <div className="glass p-4" style={{ width: '360px', minWidth: '320px', display: 'flex', flexDirection: 'column' }}>
@@ -483,7 +483,7 @@ function UnifiedBimViewer({ apsBaseUrl, viewerUrn, setViewerUrn, viewerAuth, set
         )}
 
         {/* Center: Viewer */}
-        <div className="flex-1 glass overflow-hidden" style={{ minWidth: '400px' }}>
+        <div className="flex-1 glass overflow-hidden" style={{ minWidth: '400px', height: '100%' }}>
           <ApsViewerExtended 
             ref={viewerRef}
             apsBaseUrl={apsBaseUrl} 
@@ -491,6 +491,7 @@ function UnifiedBimViewer({ apsBaseUrl, viewerUrn, setViewerUrn, viewerAuth, set
             auth={viewerAuth}
             onModelLoaded={handleModelLoaded}
             onSelectionChanged={handleSelectionChanged}
+            style={{ width: '100%', height: '100%' }}
           />
         </div>
 

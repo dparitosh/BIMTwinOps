@@ -71,6 +71,8 @@ $frontendEnv = [IO.Path]::Combine($root, 'pointcloud-frontend', '.env')
 
 $backendHost = "127.0.0.1"
 $backendPort = "8000"
+$frontendPort = if ($env:FRONTEND_PORT) { $env:FRONTEND_PORT } else { "5173" }
+$apsPort = "3001"
 $neo4jUri = "(not configured)"
 $ollamaUrl = "(not configured)"
 $azureEndpoint = "(not configured)"
@@ -79,13 +81,14 @@ if (Test-Path $backendEnv) {
   $content = Get-Content $backendEnv -Raw
   if ($content -match "BACKEND_HOST\s*=\s*([^\s\r\n]+)") { $backendHost = $Matches[1] }
   if ($content -match "BACKEND_PORT\s*=\s*(\d+)") { $backendPort = $Matches[1] }
+  if ($content -match "APS_SERVICE_PORT\s*=\s*(\d+)") { $apsPort = $Matches[1] }
   if ($content -match "NEO4J_URI\s*=\s*([^\s\r\n]+)") { $neo4jUri = $Matches[1] }
   if ($content -match "OLLAMA_BASE_URL\s*=\s*([^\s\r\n]+)") { $ollamaUrl = $Matches[1] }
   if ($content -match "AZURE_OPENAI_ENDPOINT\s*=\s*([^\s\r\n]+)") { $azureEndpoint = $Matches[1] }
 }
 
 Write-Host "  Backend:       http://${backendHost}:${backendPort}" -ForegroundColor White
-Write-Host "  Frontend:      http://localhost:5173" -ForegroundColor White
+Write-Host "  Frontend:      http://localhost:${frontendPort}" -ForegroundColor White
 Write-Host "  Neo4j:         $neo4jUri" -ForegroundColor Gray
 Write-Host "  Ollama:        $ollamaUrl" -ForegroundColor Gray
 Write-Host "  Azure OpenAI:  $azureEndpoint" -ForegroundColor Gray
@@ -97,21 +100,23 @@ Write-Host ""
 Write-Host "--- Port Check ---" -ForegroundColor Cyan
 
 $backendPortNum = [int]$backendPort
+$frontendPortNum = [int]$frontendPort
+
 $backendInUse = Get-NetTCPConnection -LocalPort $backendPortNum -State Listen -ErrorAction SilentlyContinue
 if ($backendInUse) {
-  Write-Host "[!] Port $backendPort: IN USE - will stop existing process" -ForegroundColor Yellow
+  Write-Host "[!] Port ${backendPort}: IN USE - will stop existing process" -ForegroundColor Yellow
   Stop-Process -Id $backendInUse.OwningProcess -Force -ErrorAction SilentlyContinue
   Start-Sleep -Seconds 1
 }
-Write-Host "[OK] Port $backendPort: Ready" -ForegroundColor Green
+Write-Host "[OK] Port ${backendPort}: Ready" -ForegroundColor Green
 
-$frontendInUse = Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue
+$frontendInUse = Get-NetTCPConnection -LocalPort $frontendPortNum -State Listen -ErrorAction SilentlyContinue
 if ($frontendInUse) {
-  Write-Host "[!] Port 5173: IN USE - will stop existing process" -ForegroundColor Yellow
+  Write-Host "[!] Port ${frontendPort}: IN USE - will stop existing process" -ForegroundColor Yellow
   Stop-Process -Id $frontendInUse.OwningProcess -Force -ErrorAction SilentlyContinue
   Start-Sleep -Seconds 1
 }
-Write-Host "[OK] Port 5173: Ready" -ForegroundColor Green
+Write-Host "[OK] Port ${frontendPort}: Ready" -ForegroundColor Green
 
 # ============================================================================
 # Start Services
@@ -152,7 +157,7 @@ Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Backend API: http://${backendHost}:${backendPort}" -ForegroundColor Cyan
 Write-Host "  API Docs:    http://${backendHost}:${backendPort}/docs" -ForegroundColor Cyan
-Write-Host "  Frontend:    http://localhost:5173" -ForegroundColor Cyan
+Write-Host "  Frontend:    http://localhost:${frontendPort}" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Stop all: .\stop-all.ps1" -ForegroundColor Yellow
 Write-Host ""

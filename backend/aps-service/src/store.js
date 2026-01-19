@@ -58,7 +58,13 @@ export async function createStore({ type, redisUrl }) {
     };
   }
 
-  return { kind: 'memory', ...(new MemoryStore()) };
+  const memStore = new MemoryStore();
+  return {
+    kind: 'memory',
+    get: (key) => memStore.get(key),
+    set: (key, value, ttlSeconds) => memStore.set(key, value, ttlSeconds),
+    del: (key) => memStore.del(key),
+  };
 }
 
 export function newId() {

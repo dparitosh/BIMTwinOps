@@ -69,7 +69,7 @@ class Neo4jMCPServer:
         self,
         uri: str = "bolt://localhost:7687",
         user: str = "neo4j",
-        password: str = "password"
+        password: Optional[str] = None
     ):
         """
         Initialize Neo4j MCP Server
@@ -77,8 +77,10 @@ class Neo4jMCPServer:
         Args:
             uri: Neo4j connection URI
             user: Neo4j username
-            password: Neo4j password
+            password: Neo4j password (required)
         """
+        if not password:
+            raise ValueError("Neo4j password is required")
         self.driver: Optional[Driver] = None
         self.uri = uri
         self.user = user
@@ -505,7 +507,10 @@ async def main():
     # Get configuration from environment
     neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
     neo4j_user = os.getenv("NEO4J_USER", "neo4j")
-    neo4j_password = os.getenv("NEO4J_PASSWORD", "password")
+    neo4j_password = os.getenv("NEO4J_PASSWORD")
+    
+    if not neo4j_password:
+        raise ValueError("NEO4J_PASSWORD environment variable is required")
     
     # Create and run server
     server_instance = Neo4jMCPServer(

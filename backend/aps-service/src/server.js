@@ -112,6 +112,11 @@ app.use(cors({
   credentials: true
 }));
 
+app.get('/test', (_req, res) => {
+  console.log('TEST endpoint hit');
+  res.json({ ok: true });
+});
+
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'aps-service', store: store.kind, bucket: config.APS_BUCKET_KEY });
 });
@@ -460,28 +465,44 @@ app.get('/urn/from-object-id', (req, res) => {
   return res.json({ objectId, urn: ossmd.urnFromObjectId(objectId) });
 });
 
-app.post('/oss/upload', upload.single('file'), async (req, res, next) => {
+app.post('/oss/upload', async (req, res, next) => {
   try {
-    if (!config.APS_CLIENT_ID || !config.APS_CLIENT_SECRET) {
-      return res.status(503).json({ 
-        error: 'APS credentials not configured', 
-        message: 'Please set APS_CLIENT_ID and APS_CLIENT_SECRET in backend/.env',
-        documentation: 'https://aps.autodesk.com/myapps'
-      });
-    }
-    
-    const bucketKey = String(req.body.bucketKey || config.APS_BUCKET_KEY).trim();
-    if (!req.file?.buffer) return res.status(400).json({ error: 'file is required (multipart field name: file)' });
+    console.log('[oss/upload] Request received');
+    // Handle multipart upload manually with error catching
+    upload.single('file')(req, res, async (err) => {
+      console.log('[oss/upload] multer done, err:', err);
+      if (err) {
+        console.error('[oss/upload] multer error:', err);
+        return res.status(400).json({ error: err.message });
+      }
+      try {
+        if (!config.APS_CLIENT_ID || !config.APS_CLIENT_SECRET) {
+          return res.status(503).json({ 
+            error: 'APS credentials not configured', 
+            message: 'Please set APS_CLIENT_ID and APS_CLIENT_SECRET in backend/.env',
+            documentation: 'https://aps.autodesk.com/myapps'
+          });
+        }
+        
+        const bucketKey = String(req.body.bucketKey || config.APS_BUCKET_KEY).trim();
+        if (!req.file?.buffer) return res.status(400).json({ error: 'file is required (multipart field name: file)' });
 
-    const objectKey = String(req.body.objectKey || req.file.originalname || `upload-${Date.now()}`).trim();
-    const uploadResp = await ossmd.uploadObject({ bucketKey, objectKey, buffer: req.file.buffer });
+        const objectKey = String(req.body.objectKey || req.file.originalname || `upload-${Date.now()}`).trim();
+        console.log('[oss/upload] calling ossmd.uploadObject', { bucketKey, objectKey, size: req.file.buffer.length });
+        const uploadResp = await ossmd.uploadObject({ bucketKey, objectKey, buffer: req.file.buffer });
 
-    // objectId returned by OSS upload response
-    const objectId = uploadResp.objectId || uploadResp.object_id;
-    const urn = objectId ? ossmd.urnFromObjectId(objectId) : null;
+        // objectId returned by OSS upload response
+        const objectId = uploadResp.objectId || uploadResp.object_id;
+        const urn = objectId ? ossmd.urnFromObjectId(objectId) : null;
 
-    res.json({ bucketKey, objectKey, objectId, urn, upload: uploadResp });
+        res.json({ bucketKey, objectKey, objectId, urn, upload: uploadResp });
+      } catch (e) {
+        console.error('[oss/upload] handler error:', e);
+        next(e);
+      }
+    });
   } catch (e) {
+    console.error('[oss/upload] outer error:', e);
     next(e);
   }
 });
@@ -522,9 +543,18 @@ app.get('/md/manifest', async (req, res, next) => {
 });
 
 app.use((err, _req, res, _next) => {
+  console.error('Express error:', err);
   const status = Number.isInteger(err?.status) ? err.status : 500;
   const message = err?.message || 'Internal error';
   res.status(status).json({ error: message });
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err);
 });
 
 app.listen(config.APS_SERVICE_PORT, () => {

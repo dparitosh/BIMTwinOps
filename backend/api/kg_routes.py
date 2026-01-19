@@ -38,10 +38,16 @@ def get_kg_schema() -> KnowledgeGraphSchema:
     """Get or create knowledge graph schema singleton"""
     global _kg_schema
     if _kg_schema is None:
+        neo4j_password = os.getenv("NEO4J_PASSWORD")
+        if not neo4j_password:
+            raise HTTPException(
+                status_code=500,
+                detail="NEO4J_PASSWORD environment variable is required"
+            )
         _kg_schema = KnowledgeGraphSchema(
             neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
             neo4j_user=os.getenv("NEO4J_USER", "neo4j"),
-            neo4j_password=os.getenv("NEO4J_PASSWORD", "password")
+            neo4j_password=neo4j_password
         )
     return _kg_schema
 
@@ -65,7 +71,7 @@ def get_genai_service() -> BIMTwinOpsGenAI:
             deployment_name=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o"),
             neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
             neo4j_user=os.getenv("NEO4J_USER", "neo4j"),
-            neo4j_password=os.getenv("NEO4J_PASSWORD", "password")
+            neo4j_password=os.getenv("NEO4J_PASSWORD")  # Required - validated by BIMTwinOpsGenAI
         )
     return _genai_service
 

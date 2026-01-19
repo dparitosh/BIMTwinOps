@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   Stops all running uvicorn (backend) and node (frontend) processes
-  related to BIMTwinOps
+  related to BIMTwinOps. Reads port config from .env files.
 
 .EXAMPLE
   .\stop-all.ps1
@@ -14,54 +14,70 @@
 #>
 
 $ErrorActionPreference = 'SilentlyContinue'
+$root = $PSScriptRoot
+
+# Read port configuration from .env files
+$backendPort = 8000
+$frontendPort = if ($env:FRONTEND_PORT) { [int]$env:FRONTEND_PORT } else { 5173 }
+$apsPort = 3001
+
+$backendEnv = [IO.Path]::Combine($root, 'backend', '.env')
+if (Test-Path $backendEnv) {
+  $content = Get-Content $backendEnv -Raw
+  if ($content -match "BACKEND_PORT\s*=\s*(\d+)") { $backendPort = [int]$Matches[1] }
+  if ($content -match "APS_SERVICE_PORT\s*=\s*(\d+)") { $apsPort = [int]$Matches[1] }
+}
 
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Yellow
 Write-Host "  Stopping BIMTwinOps Services" -ForegroundColor Yellow
 Write-Host "======================================" -ForegroundColor Yellow
+Write-Host "  Backend port:  $backendPort" -ForegroundColor Gray
+Write-Host "  Frontend port: $frontendPort" -ForegroundColor Gray
+Write-Host "  APS port:      $apsPort" -ForegroundColor Gray
 Write-Host ""
 
 $stopped = 0
 
-# Stop backend (port 8000)
-$backendProcs = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | 
+# Stop backend
+$backendProcs = Get-NetTCPConnection -LocalPort $backendPort -State Listen -ErrorAction SilentlyContinue | 
   Select-Object -ExpandProperty OwningProcess -Unique
 
 foreach ($procId in $backendProcs) {
   if ($procId -and $procId -gt 0) {
     $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
     if ($proc) {
-      Write-Host "Stopping backend (PID: $procId, Name: $($proc.Name))..." -ForegroundColor Cyan
+      Write-Host "Stopping backend on port $backendPort (PID: $procId, Name: $($proc.Name))..." -ForegroundColor Cyan
       Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
       $stopped++
     }
   }
 }
 
-# Stop frontend (port 5173)
-$frontendProcs = Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue | 
+# Stop frontend
+$frontendProcs = Get-NetTCPConnection -LocalPort $frontendPort -State Listen -ErrorAction SilentlyContinue | 
   Select-Object -ExpandProperty OwningProcess -Unique
 
 foreach ($procId in $frontendProcs) {
   if ($procId -and $procId -gt 0) {
     $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
     if ($proc) {
-      Write-Host "Stopping frontend (PID: $procId, Name: $($proc.Name))..." -ForegroundColor Cyan
+      Write-Host "Stopping frontend on port $frontendPort (PID: $procId, Name: $($proc.Name))..." -ForegroundColor Cyan
       Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
       $stopped++
     }
   }
 }
 
-# Stop APS service (port 3001)
-$apsProcs = Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue | 
+# Stop APS service
+$apsProcs = Get-NetTCPConnection -LocalPort $apsPort -State Listen -ErrorAction SilentlyContinue | 
   Select-Object -ExpandProperty OwningProcess -Unique
 
 foreach ($procId in $apsProcs) {
   if ($procId -and $procId -gt 0) {
     $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
     if ($proc) {
-      Write-Host "Stopping APS service (PID: $procId, Name: $($proc.Name))..." -ForegroundColor Cyan
+      Write-Host "Stopping APS service on port $apsPort (PID: $procId, Name: $($proc.Name))..." -ForegroundColor Cyan
       Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
       $stopped++
     }
