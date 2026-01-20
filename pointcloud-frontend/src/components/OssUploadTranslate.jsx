@@ -42,23 +42,33 @@ export default function OssUploadTranslate({ apsBaseUrl, onUrnReady }) {
       }
 
       for (let i = 0; i < 60; i++) {
-        const mf = await fetch(`${apsBaseUrl}/md/manifest?urn=${encodeURIComponent(urnValue)}&auth=app`);
+        const mf = await fetch(
+          `${apsBaseUrl}/md/manifest?urn=${encodeURIComponent(urnValue)}&auth=app`,
+          { cache: "no-store" }
+        );
+
+
         if (!mf.ok) {
           const body = await jsonOrText(mf);
           throw new Error(typeof body === "string" ? body : (body?.error || `Manifest failed (${mf.status})`));
         }
+
         const manifest = await mf.json();
-        const st = String(manifest?.status || "").toLowerCase();
-        if (st === "success") {
+        const status = String(manifest?.status || "").toLowerCase();
+        const progress = String(manifest?.progress || "").toLowerCase();
+
+        if (status === "success" && progress === "complete") {
           onUrnReady?.({ urn: urnValue, auth: "app" });
-          setBusy(false);
           return;
         }
-        if (st === "failed" || st === "timeout") {
-          throw new Error(`Translation failed: ${manifest?.status || "failed"}`);
+
+        if (status === "failed" || status === "timeout") {
+          throw new Error(`Translation failed: ${manifest?.status}`);
         }
+
         await new Promise((r) => setTimeout(r, 3000));
       }
+
       throw new Error("Translation is still in progress. Check again later.");
     } catch (e) {
       setError(e?.message || String(e));

@@ -94,15 +94,16 @@ export default function ApsViewer({ apsBaseUrl, urn, auth = "app", className = "
       setError(null);
 
       try {
-        const getAccessToken = async (onTokenReady) => {
-          try {
-            const { accessToken, expiresIn } = await fetchViewerToken({ apsBaseUrl, auth });
-            onTokenReady(accessToken, expiresIn);
-          } catch (e) {
-            // Viewer swallows many errors; surface it.
-            setError(e?.message || String(e));
-          }
+        const getAccessToken = (onTokenReady) => {
+          fetchViewerToken({ apsBaseUrl, auth })
+            .then(({ accessToken, expiresIn }) => {
+              onTokenReady(accessToken, expiresIn);
+            })
+            .catch((e) => {
+              setError(e?.message || String(e));
+            });
         };
+
 
         await new Promise((resolve) => {
           window.Autodesk.Viewing.Initializer(
@@ -126,7 +127,12 @@ export default function ApsViewer({ apsBaseUrl, urn, auth = "app", className = "
 
         setStatus("loading-document");
 
-        const documentId = `urn:${urnKey}`;
+        const documentId = urnKey.startsWith("urn:")
+          ? urnKey
+          : `urn:${urnKey}`;
+
+        console.log("[Viewer] Document ID:", documentId);
+
         window.Autodesk.Viewing.Document.load(
           documentId,
           (doc) => {
@@ -241,3 +247,4 @@ const overlayCardStyle = {
   maxWidth: 420,
   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
 };
+
