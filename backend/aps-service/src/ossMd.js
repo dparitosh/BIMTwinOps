@@ -66,7 +66,7 @@ export function createOssMdApi({ config, getAppAuthHeader, getUserAuthHeader }) 
   }
 
   function urnFromObjectId(objectId) {
-    return base64UrlEncode(objectId);
+    return Buffer.from(objectId).toString('base64');
   }
 
   async function translate({ urn, force = false, auth = 'app' }) {
