@@ -6,6 +6,8 @@ uvicorn[standard]>=0.32.0
 
 # Data processing
 numpy>=1.21.0
+pandas>=2.0.0
+openpyxl>=3.1.0
 python-multipart>=0.0.12
 
 # Neo4j driver for knowledge graph
@@ -32,6 +34,6 @@ langgraph>=0.2.0                    # LangGraph for agent orchestration
 langchain>=0.3.0                    # LangChain for agent foundations
 opensearch-py>=2.4.0                # OpenSearch for hybrid semantic search
 redis>=5.0.0                        # Redis for LangGraph state persistence
-# basex-client - BaseX uses REST/HTTP API, no pip package needed
+BaseXClient>=8.4.4                  # BaseX Python Client
 
 # Note: PyTorch and PointNet dependencies are in pointnet_s3dis/requirements.txt

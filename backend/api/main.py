@@ -182,39 +182,142 @@ async def upload_pointcloud(file: UploadFile = File(...)):
         return process_uploaded_array(np_array, scene_id=scene_id)
     except FileNotFoundError as e:
         # PointNet weights are not always present in lightweight installs.
-        # Fall back to a minimal response so the UI can still render the point cloud.
-        logger.warning("PointNet weights not found; using fallback segmentation: %s", e)
+        # Fall back to spatial clustering to create interesting visualizations.
+        logger.warning("PointNet weights not found; using spatial clustering fallback: %s", e)
+        return fallback_spatial_segmentation(np_array, scene_id, str(e))
 
-        xyz = np_array
-        if isinstance(xyz, np.ndarray) and xyz.ndim == 2 and xyz.shape[1] >= 3:
-            xyz = xyz[:, :3]
-        else:
-            raise HTTPException(status_code=400, detail=f"Invalid point cloud array shape: {getattr(np_array, 'shape', None)}")
-
-        labels = np.full((xyz.shape[0],), 12, dtype=np.int64)  # 'clutter'
-        centroid = xyz.mean(axis=0)
-        mins = xyz.min(axis=0)
-        maxs = xyz.max(axis=0)
-
-        segments = [{
-            "segment_key": 12,
-            "semantic_id": 12,
-            "semantic_name": "clutter",
+def fallback_spatial_segmentation(np_array: np.ndarray, scene_id: str, warning_msg: str):
+    """
+    Fallback segmentation using spatial clustering when PointNet weights unavailable.
+    Creates varied segments based on Z-height and XY grid position.
+    """
+    xyz = np_array
+    if isinstance(xyz, np.ndarray) and xyz.ndim == 2 and xyz.shape[1] >= 3:
+        xyz = xyz[:, :3].astype(np.float64)
+    else:
+        raise HTTPException(status_code=400, detail=f"Invalid point cloud array shape: {getattr(np_array, 'shape', None)}")
+    
+    n_points = xyz.shape[0]
+    
+    # Normalize to [0,1] range for easier clustering
+    mins = xyz.min(axis=0)
+    maxs = xyz.max(axis=0)
+    ranges = maxs - mins
+    ranges[ranges == 0] = 1  # Avoid division by zero
+    xyz_norm = (xyz - mins) / ranges
+    
+    # Semantic class names from S3DIS
+    SEMANTIC_NAMES = [
+        "ceiling", "floor", "wall", "beam", "column",
+        "window", "door", "chair", "table", "bookcase",
+        "sofa", "board", "clutter"
+    ]
+    
+    # Strategy: Assign labels based on height (Z) and XY grid position
+    # This creates a varied visualization without ML
+    labels = np.zeros(n_points, dtype=np.int64)
+    
+    # Height-based classification (Z axis)
+    z_norm = xyz_norm[:, 2]
+    
+    # Floor (bottom 5%)
+    floor_mask = z_norm < 0.05
+    labels[floor_mask] = 1  # floor
+    
+    # Ceiling (top 5%)
+    ceiling_mask = z_norm > 0.95
+    labels[ceiling_mask] = 0  # ceiling
+    
+    # Walls and other objects based on XY position
+    middle_mask = ~floor_mask & ~ceiling_mask
+    middle_indices = np.where(middle_mask)[0]
+    
+    if len(middle_indices) > 0:
+        # Divide XY plane into a 3x3 grid
+        x_norm = xyz_norm[middle_indices, 0]
+        y_norm = xyz_norm[middle_indices, 1]
+        
+        # Edge detection (near boundaries = walls)
+        near_x_min = x_norm < 0.1
+        near_x_max = x_norm > 0.9
+        near_y_min = y_norm < 0.1
+        near_y_max = y_norm > 0.9
+        
+        wall_mask = near_x_min | near_x_max | near_y_min | near_y_max
+        
+        # Assign walls
+        for i, idx in enumerate(middle_indices):
+            if wall_mask[i]:
+                labels[idx] = 2  # wall
+            else:
+                # Interior objects based on grid position
+                gx = int(min(2, x_norm[i] * 3))
+                gy = int(min(2, y_norm[i] * 3))
+                grid_cell = gx * 3 + gy
+                
+                # Map grid cells to furniture classes
+                cell_to_class = {
+                    0: 7,   # chair
+                    1: 8,   # table
+                    2: 9,   # bookcase
+                    3: 10,  # sofa
+                    4: 8,   # table (center)
+                    5: 7,   # chair
+                    6: 11,  # board
+                    7: 9,   # bookcase
+                    8: 12,  # clutter
+                }
+                labels[idx] = cell_to_class.get(grid_cell, 12)
+    
+    # Build segments
+    unique_labels = np.unique(labels)
+    segments = []
+    
+    for lbl in unique_labels:
+        mask = labels == lbl
+        pts = xyz[mask]
+        if len(pts) == 0:
+            continue
+            
+        centroid = pts.mean(axis=0)
+        seg_mins = pts.min(axis=0)
+        seg_maxs = pts.max(axis=0)
+        
+        segments.append({
+            "segment_key": int(lbl),
+            "semantic_id": int(lbl),
+            "semantic_name": SEMANTIC_NAMES[lbl] if lbl < len(SEMANTIC_NAMES) else "clutter",
             "centroid": centroid.tolist(),
-            "bbox_min": mins.tolist(),
-            "bbox_max": maxs.tolist(),
-            "num_points": int(xyz.shape[0]),
-        }]
-
-        return {
-            "scene_id": scene_id,
-            "points": xyz.astype(float).tolist(),
-            "labels": labels.tolist(),
-            "segments": segments,
-            "edges": [],
-            "segmentation": "fallback",
-            "warning": str(e),
-        }
+            "bbox_min": seg_mins.tolist(),
+            "bbox_max": seg_maxs.tolist(),
+            "num_points": int(np.sum(mask)),
+        })
+    
+    # Build edges (connect adjacent segments)
+    edges = []
+    for i, s1 in enumerate(segments):
+        for j, s2 in enumerate(segments):
+            if i >= j:
+                continue
+            c1 = np.array(s1["centroid"])
+            c2 = np.array(s2["centroid"])
+            dist = float(np.linalg.norm(c1 - c2))
+            if dist < 5.0:  # Only connect nearby segments
+                edges.append({
+                    "from": s1["segment_key"],
+                    "to": s2["segment_key"],
+                    "distance": round(dist, 3)
+                })
+    
+    return {
+        "scene_id": scene_id,
+        "points": xyz.astype(float).tolist(),
+        "labels": labels.tolist(),
+        "segments": segments,
+        "edges": edges,
+        "segmentation": "spatial_clustering_fallback",
+        "warning": f"Using spatial clustering fallback. {warning_msg}",
+    }
 
 def extract_cypher_from_text(text: str) -> Tuple[str, str]:
     m = CODEBLOCK_RE.search(text or "")

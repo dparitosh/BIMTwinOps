@@ -45,34 +45,46 @@ BIMTwinOps is a comprehensive digital twin platform that integrates:
 ## 🏛️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│          BIMTwinOps Frontend (React + Vite)         │
-│  ┌──────────┐ ┌───────────┐ ┌──────────────────┐   │
-│  │APS Viewer│ │Point Cloud│ │Knowledge Graph   │   │
-│  │40+ Ext.  │ │PointNet AI│ │Browser + AI Chat │   │
-│  └──────────┘ └───────────┘ └──────────────────┘   │
-└───────────────────────┬─────────────────────────────┘
-                        │ REST API
-┌───────────────────────┴─────────────────────────────┐
-│               Backend Services Layer                │
-│  ┌──────────┐ ┌──────────┐ ┌────────────────────┐  │
-│  │FastAPI   │ │APS Node  │ │Knowledge Graph API │  │
-│  │Python    │ │Service   │ │bSDD + GenAI        │  │
-│  └──────────┘ └──────────┘ └────────────────────┘  │
-└───────────┬──────────────┬──────────────┬──────────┘
-            │              │              │
-      ┌─────▼─────┐  ┌─────▼──────┐  ┌───▼────────┐
-      │  Neo4j    │  │   APS      │  │  bSDD      │
-      │Knowledge  │  │  Cloud     │  │ GraphQL    │
-      │  Graph    │  │  Services  │  │   API      │
-      └─────┬─────┘  └────────────┘  └────────────┘
-            │ sync           │
-      ┌─────▼─────┐    ┌─────▼──────┐
-      │  BaseX    │    │Azure OpenAI│
-      │Document DB│    │   GPT-4o   │
-      │(Native Win)│   └────────────┘
-      └───────────┘
+┌─────────────────────────────────────────────────────────────┐
+│            BIMTwinOps Frontend (React + Vite)               │
+│  ┌──────────┐ ┌───────────┐ ┌──────────────────────────┐   │
+│  │APS Viewer│ │Point Cloud│ │Knowledge Graph Browser   │   │
+│  │40+ Ext.  │ │PointNet AI│ │+ AI Chat + Graph Viz     │   │
+│  └──────────┘ └───────────┘ └──────────────────────────┘   │
+└───────────────────────┬─────────────────────────────────────┘
+                        │ REST API / WebSocket
+┌───────────────────────┴─────────────────────────────────────┐
+│                 Backend Services Layer                       │
+│  ┌──────────┐ ┌──────────┐ ┌────────────────────────────┐  │
+│  │FastAPI   │ │APS Node  │ │Knowledge Graph API         │  │
+│  │:8000     │ │:3001     │ │bSDD + GenAI + GraphQL      │  │
+│  └──────────┘ └──────────┘ └────────────────────────────┘  │
+└───────┬──────────────┬──────────────┬──────────────┬───────┘
+        │              │              │              │
+  ┌─────▼─────┐  ┌─────▼──────┐  ┌───▼────────┐ ┌───▼────────┐
+  │  Neo4j    │  │   APS      │  │  bSDD      │ │   BaseX    │
+  │Knowledge  │  │  Cloud     │  │ GraphQL    │ │   XML DB   │
+  │Graph:7687 │  │  Services  │  │   API      │ │   :8080    │
+  └───────────┘  └────────────┘  └────────────┘ └────────────┘
+        │                              │
+  ┌─────▼─────┐                  ┌─────▼──────┐
+  │  Ollama   │                  │Azure OpenAI│
+  │Local LLM  │                  │   GPT-4o   │
+  │  :11434   │                  └────────────┘
+  └───────────┘
 ```
+
+### Service Ports
+
+| Service | Port | Protocol | Purpose |
+|---------|------|----------|---------|
+| Frontend | 5173 | HTTP | React + Vite dev server |
+| Backend API | 8000 | HTTP | FastAPI REST/GraphQL |
+| APS Service | 3001 | HTTP | Autodesk OAuth proxy |
+| Neo4j | 7687 | Bolt | Knowledge graph DB |
+| Neo4j Browser | 7474 | HTTP | Neo4j web UI |
+| Ollama | 11434 | HTTP | Local LLM API |
+| BaseX | 8080 | HTTP | XML/XQuery DB + Admin |
 
 ## 📁 Project Structure
 ```

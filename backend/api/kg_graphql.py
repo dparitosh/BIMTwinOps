@@ -11,6 +11,12 @@ from dotenv import load_dotenv
 
 from .knowledge_graph_schema import KnowledgeGraphSchema
 from .bsdd_client import BSDDClient, BSDDEnvironment
+from .ifc_mapping import (
+    map_bsdd_dictionary_to_ifc_classification,
+    map_bsdd_class_to_ifc_classification_reference,
+    map_bsdd_property_to_ifc_property_single_value,
+    map_bsdd_material_to_ifc_material
+)
 
 load_dotenv()
 
@@ -413,7 +419,41 @@ class SearchResult:
 @strawberry.type
 class Query:
     """GraphQL Query Root"""
-    
+
+    @strawberry.field
+    def export_ifc_dictionary(self, uri: str) -> dict:
+        """Export bSDD dictionary as IFC-compliant objects"""
+        kg = get_kg_schema()
+        # Get dictionary node
+        query = "MATCH (d:BsddDictionary {uri: $uri}) RETURN d"
+        results = kg.execute_query(query, {"uri": uri})
+        if not results:
+            return {"error": "Dictionary not found"}
+        dict_data = dict(results[0]["d"])
+        ifc_dict = map_bsdd_dictionary_to_ifc_classification(dict_data)
+
+        # Get classes
+        query = "MATCH (c:BsddClass)-[:IN_DICTIONARY]->(d:BsddDictionary {uri: $uri}) RETURN c"
+        class_results = kg.execute_query(query, {"uri": uri})
+        ifc_classes = [map_bsdd_class_to_ifc_classification_reference(dict(cr["c"])) for cr in class_results]
+
+        # Get properties
+        query = "MATCH (p:BsddProperty)<-[:HAS_PROPERTY]-(c:BsddClass)-[:IN_DICTIONARY]->(d:BsddDictionary {uri: $uri}) RETURN p"
+        prop_results = kg.execute_query(query, {"uri": uri})
+        ifc_properties = [map_bsdd_property_to_ifc_property_single_value(dict(pr["p"])) for pr in prop_results]
+
+        # Get materials
+        query = "MATCH (c:BsddClass {classType: 'Material'})-[:IN_DICTIONARY]->(d:BsddDictionary {uri: $uri}) RETURN c"
+        mat_results = kg.execute_query(query, {"uri": uri})
+        ifc_materials = [map_bsdd_material_to_ifc_material(dict(mr["c"])) for mr in mat_results]
+
+        return {
+            "IfcClassification": ifc_dict,
+            "IfcClassificationReferences": ifc_classes,
+            "IfcPropertySingleValues": ifc_properties,
+            "IfcMaterials": ifc_materials
+        }
+
     @strawberry.field
     def bsdd_dictionaries(
         self,
@@ -479,6 +519,12 @@ class Query:
             synonyms=class_data.get("synonyms", [])
         )
     
+    @strawberry.type
+    class BsddClassConnection:
+        edges: List[BsddClass]
+        end_cursor: Optional[str]
+        has_next_page: bool
+
     @strawberry.field
     def bsdd_classes(
         self,
@@ -486,12 +532,11 @@ class Query:
         class_type: Optional[str] = None,
         ifc_entity: Optional[str] = None,
         search_text: Optional[str] = None,
-        limit: Optional[int] = 100
-    ) -> List[BsddClass]:
-        """Search bSDD classes with filters"""
+        first: Optional[int] = 20,
+        after: Optional[str] = None
+    ) -> BsddClassConnection:
+        """Search bSDD classes with cursor-based pagination"""
         kg = get_kg_schema()
-        
-        # Build dynamic query based on filters
         where_clauses = []
         if dictionary_uri:
             where_clauses.append("c.dictionaryUri = $dictionary_uri")
@@ -501,29 +546,29 @@ class Query:
             where_clauses.append("$ifc_entity IN c.relatedIfcEntities")
         if search_text:
             where_clauses.append("(c.name CONTAINS $search_text OR c.definition CONTAINS $search_text)")
-        
+        if after:
+            where_clauses.append("c.uri > $after")
         where_clause = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
-        
         query = f"""
         MATCH (c:BsddClass)
         {where_clause}
         RETURN c
-        ORDER BY c.name
-        LIMIT $limit
+        ORDER BY c.uri
+        LIMIT $first
         """
-        
         result = kg.execute_query(query, {
             "dictionary_uri": dictionary_uri,
             "class_type": class_type,
             "ifc_entity": ifc_entity,
             "search_text": search_text,
-            "limit": limit
+            "first": first,
+            "after": after
         })
-        
-        classes = []
+        edges = []
+        end_cursor = None
         for record in result:
             class_data = dict(record["c"])
-            classes.append(BsddClass(
+            edges.append(BsddClass(
                 uri=class_data.get("uri", ""),
                 code=class_data.get("code", ""),
                 name=class_data.get("name", ""),
@@ -532,7 +577,9 @@ class Query:
                 related_ifc_entities=class_data.get("relatedIfcEntities", []),
                 synonyms=class_data.get("synonyms", [])
             ))
-        return classes
+            end_cursor = class_data.get("uri", None)
+        has_next_page = len(edges) == first
+        return BsddClassConnection(edges=edges, end_cursor=end_cursor, has_next_page=has_next_page)
     
     @strawberry.field
     def bsdd_property(self, uri: str) -> Optional[BsddProperty]:
@@ -871,16 +918,39 @@ class Query:
 # GraphQL Mutations
 # ============================================================================
 
+
+@strawberry.input
+class IfcBsddLinkInput:
+    ifc_global_id: str
+    bsdd_class_uri: str
+
+
+@strawberry.type
+class MutationResult:
+    success: bool
+    error: Optional[str] = None
+
+
 @strawberry.type
 class Mutation:
     """GraphQL Mutation Root"""
-    
+
     @strawberry.mutation
-    def link_ifc_to_bsdd(
-        self,
-        ifc_global_id: str,
-        bsdd_class_uri: str
-    ) -> bool:
+    def batch_link_ifc_to_bsdd(self, links: List[IfcBsddLinkInput]) -> List[MutationResult]:
+        """Batch link multiple IFC elements to bSDD classes"""
+        kg = get_kg_schema()
+        results: List[MutationResult] = []
+        for link in links:
+            try:
+                kg.link_ifc_element_to_bsdd(link.ifc_global_id, link.bsdd_class_uri)
+                results.append(MutationResult(success=True))
+            except Exception as e:
+                logger.error(f"Failed to link IFC to bSDD: {e}")
+                results.append(MutationResult(success=False, error=str(e)))
+        return results
+
+    @strawberry.mutation
+    def link_ifc_to_bsdd(self, ifc_global_id: str, bsdd_class_uri: str) -> bool:
         """Create a mapping between an IFC element and a bSDD class"""
         kg = get_kg_schema()
         try:
@@ -889,13 +959,9 @@ class Mutation:
         except Exception as e:
             logger.error(f"Failed to link IFC to bSDD: {e}")
             return False
-    
+
     @strawberry.mutation
-    def link_segment_to_bsdd(
-        self,
-        segment_id: str,
-        bsdd_class_uri: str
-    ) -> bool:
+    def link_segment_to_bsdd(self, segment_id: str, bsdd_class_uri: str) -> bool:
         """Create a mapping between a point cloud segment and a bSDD class"""
         kg = get_kg_schema()
         try:
@@ -904,6 +970,38 @@ class Mutation:
         except Exception as e:
             logger.error(f"Failed to link segment to bSDD: {e}")
             return False
+
+    @strawberry.mutation
+    def create_bsdd_class(
+        self,
+        uri: str,
+        code: str,
+        name: str,
+        definition: Optional[str] = None,
+        class_type: Optional[str] = None,
+        dictionary_uri: Optional[str] = None,
+        parent_class_uri: Optional[str] = None,
+        related_ifc_entities: Optional[List[str]] = None,
+        synonyms: Optional[List[str]] = None
+    ) -> MutationResult:
+        """Create a new bSDD class node"""
+        kg = get_kg_schema()
+        try:
+            kg.create_bsdd_class(
+                uri=uri,
+                code=code,
+                name=name,
+                definition=definition,
+                class_type=class_type,
+                dictionary_uri=dictionary_uri,
+                parent_class_uri=parent_class_uri,
+                related_ifc_entities=related_ifc_entities or [],
+                synonyms=synonyms or []
+            )
+            return MutationResult(success=True)
+        except Exception as e:
+            logger.error(f"Failed to create bSDD class: {e}")
+            return MutationResult(success=False, error=str(e))
 
 
 # ============================================================================

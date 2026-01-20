@@ -31,8 +31,11 @@ class KnowledgeGraphSchema:
         "BSDD_DICTIONARY": "BsddDictionary",
         "BSDD_CLASS": "BsddClass",
         "BSDD_PROPERTY": "BsddProperty",
+        "BSDD_CLASS_PROPERTY": "BsddClassProperty",
         "BSDD_UNIT": "BsddUnit",
         "BSDD_ALLOWED_VALUE": "BsddAllowedValue",
+        "BSDD_CLASS_RELATION": "BsddClassRelation",
+        "BSDD_PROPERTY_RELATION": "BsddPropertyRelation",
         
         # Property and Relationship Nodes
         "PROPERTY": "Property",
@@ -53,9 +56,12 @@ class KnowledgeGraphSchema:
         "CLASSIFIED_AS": "CLASSIFIED_AS",
         "IS_SUBCLASS_OF": "IS_SUBCLASS_OF",
         "IS_PARENT_OF": "IS_PARENT_OF",
+        "HAS_PARENT_CLASS": "HAS_PARENT_CLASS",
         
         # Property Relationships
         "HAS_PROPERTY": "HAS_PROPERTY",
+        "HAS_CLASS_PROPERTY": "HAS_CLASS_PROPERTY",
+        "REFERENCES_PROPERTY": "REFERENCES_PROPERTY",
         "PROPERTY_OF": "PROPERTY_OF",
         "HAS_ALLOWED_VALUE": "HAS_ALLOWED_VALUE",
         "HAS_UNIT": "HAS_UNIT",
@@ -65,6 +71,8 @@ class KnowledgeGraphSchema:
         "IFC_ENTITY_MAPPING": "IFC_ENTITY_MAPPING",
         "RELATED_TO": "RELATED_TO",
         "EQUIVALENT_TO": "EQUIVALENT_TO",
+        "HAS_CLASS_RELATION": "HAS_CLASS_RELATION",
+        "HAS_PROPERTY_RELATION": "HAS_PROPERTY_RELATION",
         
         # Point Cloud Relationships
         "SEGMENT_OF": "SEGMENT_OF",
@@ -118,6 +126,12 @@ class KnowledgeGraphSchema:
                 
                 f"CREATE CONSTRAINT bsdd_property_uri IF NOT EXISTS "
                 f"FOR (p:{self.NODE_LABELS['BSDD_PROPERTY']}) REQUIRE p.uri IS UNIQUE",
+                
+                f"CREATE CONSTRAINT bsdd_class_property_uri IF NOT EXISTS "
+                f"FOR (cp:{self.NODE_LABELS['BSDD_CLASS_PROPERTY']}) REQUIRE cp.uri IS UNIQUE",
+                
+                f"CREATE CONSTRAINT bsdd_allowed_value_uri IF NOT EXISTS "
+                f"FOR (av:{self.NODE_LABELS['BSDD_ALLOWED_VALUE']}) REQUIRE av.uri IS UNIQUE",
                 
                 # Semantic Classes
                 f"CREATE CONSTRAINT semantic_class_label IF NOT EXISTS "
@@ -185,6 +199,7 @@ class KnowledgeGraphSchema:
             d.license = $license,
             d.releaseDate = $release_date,
             d.moreInfoUrl = $more_info_url,
+            d.basexUri = $basex_uri,
             d.lastUpdated = timestamp()
         RETURN d
         """
@@ -199,9 +214,35 @@ class KnowledgeGraphSchema:
                 "language_code": language_code,
                 "license": kwargs.get("license"),
                 "release_date": kwargs.get("release_date"),
-                "more_info_url": kwargs.get("more_info_url")
+                "more_info_url": kwargs.get("more_info_url"),
+                "basex_uri": kwargs.get("basex_uri")
             })
             return result.single()[0]
+    
+    def create_bsdd_class(
+        self,
+        uri: str,
+        code: str,
+        name: str,
+        definition: str = None,
+        class_type: str = None,
+        dictionary_uri: str = None,
+        parent_class_uri: str = None,
+        related_ifc_entities: list = None,
+        synonyms: list = None
+    ):
+        """Create a bSDD Class node and link to dictionary (wrapper for GraphQL)"""
+        return self.create_bsdd_class_node(
+            uri=uri,
+            code=code,
+            name=name,
+            dictionary_uri=dictionary_uri,
+            definition=definition,
+            class_type=class_type,
+            parent_class_uri=parent_class_uri,
+            related_ifc_entities=related_ifc_entities or [],
+            synonyms=synonyms or []
+        )
     
     def create_bsdd_class_node(
         self,
@@ -380,7 +421,280 @@ class KnowledgeGraphSchema:
                 "bsdd_class_uri": bsdd_class_uri,
                 "confidence": confidence
             })
-    
+            
+    def create_bsdd_class_property_node(
+        self, 
+        uri: str, 
+        class_uri: str,
+        property_uri: str,
+        property_set: str = None,
+        is_required: bool = False,
+        **kwargs
+    ):
+        """
+        Create a BsddClassProperty node (reified relationship)
+        Links BsddClass -> BsddClassProperty -> BsddProperty
+        """
+        query = f"""
+        MATCH (c:{self.NODE_LABELS['BSDD_CLASS']} {{uri: $class_uri}})
+        MATCH (p:{self.NODE_LABELS['BSDD_PROPERTY']} {{uri: $property_uri}})
+        
+        MERGE (cp:{self.NODE_LABELS['BSDD_CLASS_PROPERTY']} {{uri: $uri}})
+        SET cp.propertySet = $property_set,
+            cp.isRequired = $is_required,
+            cp.minInclusive = $min_inclusive,
+            cp.maxInclusive = $max_inclusive,
+            cp.symbol = $symbol,
+            cp.lastUpdated = timestamp()
+            
+        MERGE (c)-[:{self.RELATIONSHIPS['HAS_CLASS_PROPERTY']}]->(cp)
+        MERGE (cp)-[:{self.RELATIONSHIPS['REFERENCES_PROPERTY']}]->(p)
+        
+        RETURN cp
+        """
+        
+        with self.driver.session() as session:
+            result = session.run(query, {
+                "uri": uri,
+                "class_uri": class_uri,
+                "property_uri": property_uri,
+                "property_set": property_set,
+                "is_required": is_required,
+                "min_inclusive": kwargs.get("min_inclusive"),
+                "max_inclusive": kwargs.get("max_inclusive"),
+                "symbol": kwargs.get("symbol")
+            })
+            return result.single()[0] if result.peek() else None
+
+    def create_bsdd_allowed_value_node(
+        self,
+        uri: str,
+        value: str,
+        property_uri: str = None, 
+        class_property_uri: str = None,
+        description: str = None,
+        sort_number: int = None
+    ):
+        """
+        Create a BsddAllowedValue node
+        Can be linked to BsddProperty OR BsddClassProperty via HAS_ALLOWED_VALUE
+        """
+        query = f"""
+        MERGE (av:{self.NODE_LABELS['BSDD_ALLOWED_VALUE']} {{uri: $uri}})
+        SET av.value = $value,
+            av.description = $description,
+            av.sortNumber = $sort_number,
+            av.lastUpdated = timestamp()
+        """
+        
+        # Link to Property if provided
+        if property_uri:
+            query += f"""
+            WITH av
+            MATCH (p:{self.NODE_LABELS['BSDD_PROPERTY']} {{uri: $property_uri}})
+            MERGE (p)-[:{self.RELATIONSHIPS['HAS_ALLOWED_VALUE']}]->(av)
+            """
+            
+        # Link to ClassProperty if provided
+        if class_property_uri:
+            query += f"""
+            WITH av
+            MATCH (cp:{self.NODE_LABELS['BSDD_CLASS_PROPERTY']} {{uri: $class_property_uri}})
+            MERGE (cp)-[:{self.RELATIONSHIPS['HAS_ALLOWED_VALUE']}]->(av)
+            """
+            
+        query += "RETURN av"
+        
+        with self.driver.session() as session:
+            result = session.run(query, {
+                "uri": uri,
+                "value": value,
+                "property_uri": property_uri,
+                "class_property_uri": class_property_uri,
+                "description": description,
+                "sort_number": sort_number
+            })
+            return result.single()[0] if result.peek() else None
+
+    def create_bsdd_class_relation_node(
+        self,
+        uri: str,
+        from_class_uri: str,
+        to_class_uri: str,
+        relation_type: str,
+        **kwargs
+    ):
+        """
+        Create a BsddClassRelation node (reified relationship)
+        Links BsddClass (from) -> BsddClassRelation -> BsddClass (to)
+        """
+        query = f"""
+        MATCH (c1:{self.NODE_LABELS['BSDD_CLASS']} {{uri: $from_uri}})
+        MATCH (c2:{self.NODE_LABELS['BSDD_CLASS']} {{uri: $to_uri}})
+        
+        MERGE (cr:{self.NODE_LABELS['BSDD_CLASS_RELATION']} {{uri: $uri}})
+        SET cr.relationType = $relation_type,
+            cr.description = $description,
+            cr.fraction = $fraction,
+            cr.lastUpdated = timestamp()
+            
+        MERGE (c1)-[:{self.RELATIONSHIPS['HAS_CLASS_RELATION']}]->(cr)
+        MERGE (cr)-[:{self.RELATIONSHIPS['RELATED_TO']}]->(c2)
+        
+        RETURN cr
+        """
+        
+        with self.driver.session() as session:
+            result = session.run(query, {
+                "uri": uri,
+                "from_uri": from_class_uri,
+                "to_uri": to_class_uri,
+                "relation_type": relation_type,
+                "description": kwargs.get("description"),
+                "fraction": kwargs.get("fraction")
+            })
+            return result.single()[0] if result.peek() else None
+            
+    def create_bsdd_property_relation_node(
+        self,
+        uri: str,
+        from_property_uri: str,
+        to_property_uri: str,
+        relation_type: str,
+        **kwargs
+    ):
+        """
+        Create a BsddPropertyRelation node (reified relationship)
+        Links BsddProperty (from) -> BsddPropertyRelation -> BsddProperty (to)
+        """
+        query = f"""
+        MATCH (p1:{self.NODE_LABELS['BSDD_PROPERTY']} {{uri: $from_uri}})
+        MATCH (p2:{self.NODE_LABELS['BSDD_PROPERTY']} {{uri: $to_uri}})
+        
+        MERGE (pr:{self.NODE_LABELS['BSDD_PROPERTY_RELATION']} {{uri: $uri}})
+        SET pr.relationType = $relation_type,
+            pr.description = $description,
+            pr.lastUpdated = timestamp()
+            
+        MERGE (p1)-[:{self.RELATIONSHIPS['HAS_PROPERTY_RELATION']}]->(pr)
+        MERGE (pr)-[:{self.RELATIONSHIPS['RELATED_TO']}]->(p2)
+        
+        RETURN pr
+        """
+        
+        with self.driver.session() as session:
+            result = session.run(query, {
+                "uri": uri,
+                "from_uri": from_property_uri,
+                "to_uri": to_property_uri,
+                "relation_type": relation_type,
+                "description": kwargs.get("description")
+            })
+            return result.single()[0] if result.peek() else None
+
+    # --- Query Methods (P2.2) ---
+
+    def get_class_hierarchy(self, uri: str, depth: int = 5) -> Dict:
+        """Get class hierarchy (parents and children)"""
+        # Parents
+        parent_query = f"""
+        MATCH path = (c:{self.NODE_LABELS['BSDD_CLASS']} {{uri: $uri}})-[:{self.RELATIONSHIPS['HAS_PARENT_CLASS']}*1..{depth}]->(parent)
+        RETURN [node in nodes(path) | {{uri: node.uri, name: node.name, code: node.code}}] as parents
+        """
+        
+        # Children
+        child_query = f"""
+        MATCH path = (child)-[:{self.RELATIONSHIPS['HAS_PARENT_CLASS']}*1..1]->(c:{self.NODE_LABELS['BSDD_CLASS']} {{uri: $uri}})
+        RETURN {{uri: child.uri, name: child.name, code: child.code}} as child
+        """
+        
+        with self.driver.session() as session:
+             parents = session.run(parent_query, {"uri": uri}).value()
+             children = session.run(child_query, {"uri": uri}).data()
+             
+             return {
+                 "uri": uri,
+                 "parents": parents if parents else [],
+                 "children": [c["child"] for c in children]
+             }
+
+    def get_class_properties(self, uri: str) -> List[Dict]:
+        """Get all properties associated with a class, including inherited details"""
+        query = f"""
+        MATCH (c:{self.NODE_LABELS['BSDD_CLASS']} {{uri: $uri}})
+        MATCH (c)-[r:{self.RELATIONSHIPS['HAS_CLASS_PROPERTY']}]->(cp:{self.NODE_LABELS['BSDD_CLASS_PROPERTY']})
+        OPTIONAL MATCH (cp)-[:{self.RELATIONSHIPS['REFERENCES_PROPERTY']}]->(p:{self.NODE_LABELS['BSDD_PROPERTY']})
+        RETURN {{
+            uri: cp.uri,
+            propertySet: cp.propertySet,
+            isRequired: cp.isRequired,
+            property: {{
+                uri: p.uri,
+                code: p.code,
+                name: p.name,
+                dataType: p.dataType
+            }}
+        }} as classProperty
+        ORDER BY cp.sortNumber ASC
+        """
+        with self.driver.session() as session:
+            return session.run(query, {"uri": uri}).value()
+
+    def get_class_relations(self, uri: str) -> List[Dict]:
+        """Get relations involving this class (both direct and reified)"""
+        # Direct relationships are covered by specific methods usually.
+        # Assuming reified BSDD_CLASS_RELATION here primarily.
+        query = f"""
+        MATCH (c:{self.NODE_LABELS['BSDD_CLASS']} {{uri: $uri}})
+        MATCH (c)-[:{self.RELATIONSHIPS['HAS_CLASS_RELATION']}]->(cr:{self.NODE_LABELS['BSDD_CLASS_RELATION']})
+        MATCH (cr)-[:{self.RELATIONSHIPS['RELATED_TO']}]->(target:{self.NODE_LABELS['BSDD_CLASS']})
+        RETURN {{
+            relationType: cr.relationType,
+            description: cr.description,
+            targetClass: {{
+                uri: target.uri,
+                name: target.name,
+                code: target.code
+            }}
+        }} as relation
+        """
+        with self.driver.session() as session:
+             return session.run(query, {"uri": uri}).value()
+
+    def get_property_allowed_values(self, uri: str) -> List[Dict]:
+        """Get allowed values for a property"""
+        # Can be directly on Property or on ClassProperty
+        query = f"""
+        MATCH (p)-[:{self.RELATIONSHIPS['HAS_ALLOWED_VALUE']}]->(av:{self.NODE_LABELS['BSDD_ALLOWED_VALUE']})
+        WHERE p.uri = $uri
+        RETURN {{
+             value: av.value,
+             description: av.description,
+             sortNumber: av.sortNumber
+        }} as allowedValue
+        ORDER BY av.sortNumber ASC
+        """
+        with self.driver.session() as session:
+            return session.run(query, {"uri": uri}).value()
+
+    def get_property_relations(self, uri: str) -> List[Dict]:
+        """Get relations involving this property (reified)"""
+        query = f"""
+        MATCH (p:{self.NODE_LABELS['BSDD_PROPERTY']} {{uri: $uri}})
+        MATCH (p)-[:{self.RELATIONSHIPS['HAS_PROPERTY_RELATION']}]->(pr:{self.NODE_LABELS['BSDD_PROPERTY_RELATION']})
+        MATCH (pr)-[:{self.RELATIONSHIPS['RELATED_TO']}]->(target:{self.NODE_LABELS['BSDD_PROPERTY']})
+        RETURN {{
+            relationType: pr.relationType,
+            description: pr.description,
+            targetProperty: {{
+                uri: target.uri,
+                name: target.name
+            }}
+        }} as relation
+        """
+        with self.driver.session() as session:
+             return session.run(query, {"uri": uri}).value()
+
     def get_schema_info(self) -> Dict:
         """Get information about the current schema"""
         with self.driver.session() as session:
@@ -402,6 +716,49 @@ class KnowledgeGraphSchema:
                 "nodes": nodes,
                 "relationships": relationships
             }
+
+    def advanced_search(self, query: str = None, type: str = None, status: str = None, dictionary_uri: str = None, description: str = None, limit: int = 20) -> list:
+        """
+        Advanced search for classes/properties with multi-field, type, status, and dictionary filtering.
+        Args:
+            query: Text to search in code, name, or definition
+            type: 'class', 'property', or None (both)
+            status: Filter by status (Active, Inactive, Preview)
+            dictionary_uri: Restrict to a specific dictionary
+            description: Search in description field
+            limit: Max results
+        Returns:
+            List of matching nodes (dicts)
+        """
+        cypher = []
+        params = {}
+        if type == 'class':
+            cypher.append(f"MATCH (n:{self.NODE_LABELS['BSDD_CLASS']})")
+        elif type == 'property':
+            cypher.append(f"MATCH (n:{self.NODE_LABELS['BSDD_PROPERTY']})")
+        else:
+            cypher.append(f"MATCH (n) WHERE n:{self.NODE_LABELS['BSDD_CLASS']} OR n:{self.NODE_LABELS['BSDD_PROPERTY']}")
+        
+        where = []
+        if query:
+            where.append("(toLower(n.code) CONTAINS toLower($q) OR toLower(n.name) CONTAINS toLower($q) OR toLower(n.definition) CONTAINS toLower($q))")
+            params['q'] = query
+        if status:
+            where.append("n.status = $status")
+            params['status'] = status
+        if dictionary_uri:
+            where.append("n.dictionaryUri = $dictionary_uri OR n.dictionary_uri = $dictionary_uri")
+            params['dictionary_uri'] = dictionary_uri
+        if description:
+            where.append("toLower(n.definition) CONTAINS toLower($desc)")
+            params['desc'] = description
+        if where:
+            cypher.append("WHERE " + " AND ".join(where))
+        cypher.append("RETURN n LIMIT $limit")
+        params['limit'] = limit
+        query_str = "\n".join(cypher)
+        with self.driver.session() as session:
+            return [r['n'] for r in session.run(query_str, params)]
 
 
 # Example usage
