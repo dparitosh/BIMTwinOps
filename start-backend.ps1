@@ -170,5 +170,10 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Press Ctrl+C to stop" -ForegroundColor Yellow
 Write-Host ""
 
-# Run uvicorn
-python -m uvicorn api.main:app --host $bindHost --port $port $reloadFlag
+
+# Run uvicorn with correct reload flag handling
+if ($Reload) {
+  python -m uvicorn api.main:app --host $bindHost --port $port --reload
+} else {
+  python -m uvicorn api.main:app --host $bindHost --port $port
+}

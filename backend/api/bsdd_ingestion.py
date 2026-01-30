@@ -96,6 +96,22 @@ class BSDDIngestionPipeline:
         except Exception as e:
             logger.error(f"Failed to fetch dictionaries: {e}")
             raise
+
+    def _validate_class(self, bsdd_class) -> List[str]:
+        """Validate class data before ingestion"""
+        errors = []
+        if not bsdd_class.uri:
+            errors.append(f"Class missing URI: {getattr(bsdd_class, 'code', 'Unknown')}")
+        if not bsdd_class.code:
+            errors.append(f"Class missing Code: {getattr(bsdd_class, 'uri', 'Unknown')}")
+        if not bsdd_class.name:
+            errors.append(f"Class missing Name: {getattr(bsdd_class, 'uri', 'Unknown')}")
+        
+        # Check self-reference in parent
+        if getattr(bsdd_class, 'parent_class_uri', None) and bsdd_class.parent_class_uri == bsdd_class.uri:
+             errors.append(f"Class has self-referencing parent: {bsdd_class.uri}")
+             
+        return errors
     
     def ingest_dictionary(
         self,
@@ -148,7 +164,77 @@ class BSDDIngestionPipeline:
         except Exception as e:
             logger.error(f"Failed to ingest dictionary {dictionary_uri}: {e}")
             raise
-    
+
+    def ingest_from_json(self, data: Dict[str, Any]):
+        """
+        Ingest dictionary data directly from JSON structure (bSDD Export format)
+        Args:
+            data: Dictionary containing 'dictionary', 'classes', 'properties' keys
+        """
+        try:
+            # 1. Dictionary Metadata
+            d_data = data.get("dictionary", {})
+            if not d_data.get("uri"):
+                 d_data["uri"] = f"https://example.org/{d_data.get('organizationCode', 'unknown')}/{d_data.get('name', 'unknown')}/{d_data.get('version', '0.1')}"
+
+            logger.info(f"Ingesting dictionary from JSON: {d_data.get('name')}")
+            self.kg.create_bsdd_dictionary_node(
+                uri=d_data.get("uri"),
+                name=d_data.get("name"),
+                version=d_data.get("version"),
+                organization_code=d_data.get("organizationCode"),
+                status=d_data.get("status", "Preview"),
+                language_code=d_data.get("languageCode", "en"),
+                license=d_data.get("license"),
+                release_date=d_data.get("releaseDate"),
+                more_info_url=d_data.get("moreInfoUrl")
+            )
+
+            # 2. Classes
+            classes = data.get("classes", [])
+            logger.info(f"Ingesting {len(classes)} classes from JSON")
+            for cls in classes:
+                # Convert dict to BSDDClass object for validation if needed, or pass dict directly
+                # Current pipeline methods call self.bsdd.get_class_details which returns an object.
+                # Here we operate on dicts, so we call KG methods directly.
+                
+                # Basic Mapping
+                self.kg.create_bsdd_class_node(
+                    uri=cls.get("uri"),
+                    code=cls.get("code"),
+                    name=cls.get("name"),
+                    dictionary_uri=d_data.get("uri"),
+                    definition=cls.get("definition"),
+                    class_type=cls.get("classType"),
+                    synonyms=cls.get("synonyms"),
+                    related_ifc_entities=cls.get("relatedIfcEntityNames")
+                )
+                
+                # Properties
+                if "properties" in cls:
+                    self._ingest_class_properties(cls.get("uri"), cls["properties"])
+
+                # Relations (not fully implemented in JSON import yet, assuming simplified)
+                
+            # 3. Independent Properties
+            properties = data.get("properties", [])
+            logger.info(f"Ingesting {len(properties)} properties from JSON")
+            for prop in properties:
+                self.kg.create_bsdd_property_node(
+                     uri=prop.get("uri"),
+                     code=prop.get("code"),
+                     name=prop.get("name"),
+                     definition=prop.get("definition"),
+                     data_type=prop.get("dataType"),
+                     units=prop.get("units"),
+                     physical_quantity=prop.get("physicalQuantity"),
+                     dimension=prop.get("dimension")
+                )
+                
+        except Exception as e:
+            logger.error(f"Failed to ingest from JSON: {e}")
+            raise
+
     def _ingest_dictionary_classes(
         self,
         dictionary_uri: str,
@@ -180,6 +266,13 @@ class BSDDIngestionPipeline:
                         include_relations=True
                     )
                     
+                    # Validation
+                    validation_errors = self._validate_class(detailed_class)
+                    if validation_errors:
+                        for err in validation_errors:
+                            logger.warning(f"Validation error for class {detailed_class.code}: {err}")
+                        continue
+
                     # Create class node
                     self.kg.create_bsdd_class_node(
                         uri=detailed_class.uri,
@@ -241,9 +334,11 @@ class BSDDIngestionPipeline:
         """Ingest properties for a class"""
         for prop in properties:
             try:
-                # Create property node
+                # 1. Create independent BsddProperty node (definition)
+                property_uri = prop.get("propertyUri") or prop.get("uri", "")
+                
                 self.kg.create_bsdd_property_node(
-                    uri=prop.get("uri", ""),
+                    uri=property_uri,
                     code=prop.get("code", ""),
                     name=prop.get("name", ""),
                     definition=prop.get("definition") or prop.get("description"),
@@ -255,21 +350,88 @@ class BSDDIngestionPipeline:
                     is_required=prop.get("isRequired", False)
                 )
                 
-                # Link property to class
-                self.kg.link_class_to_property(
+                # 2. Create BsddClassProperty node (contextual assignment)
+                # Use class_uri + property_uri as ID if no explicit URI for the relationship
+                class_prop_uri = prop.get("uri") if prop.get("propertyUri") else f"{class_uri}/prop/{prop.get('code')}"
+                
+                self.kg.create_bsdd_class_property_node(
+                    uri=class_prop_uri,
                     class_uri=class_uri,
-                    property_uri=prop.get("uri", ""),
+                    property_uri=property_uri,
                     property_set=prop.get("propertySet"),
-                    is_required=prop.get("isRequired", False)
+                    is_required=prop.get("isRequired", False),
+                    min_inclusive=prop.get("minInclusive"),
+                    max_inclusive=prop.get("maxInclusive"),
+                    symbol=prop.get("symbol")
                 )
                 
+                # 3. Create Allowed Values (if any)
+                allowed_values = prop.get("allowedValues", [])
+                if allowed_values:
+                    self._ingest_allowed_values(allowed_values, class_property_uri=class_prop_uri)
+                
+                # 4. Ingest Property Relations (if any)
+                property_relations = prop.get("relations", [])
+                if property_relations:
+                    self._ingest_property_relationships(property_uri, property_relations)
+
                 self.stats["properties_processed"] += 1
                 self.stats["relationships_created"] += 1
                 
             except Exception as e:
                 logger.warning(f"Failed to process property: {e}")
                 continue
-    
+
+    def _ingest_property_relationships(
+        self,
+        property_uri: str,
+        relations: List[Dict]
+    ):
+        """Ingest relationships between properties"""
+        for relation in relations:
+            try:
+                related_uri = relation.get("relatedPropertyUri")
+                relation_type = relation.get("relationType")
+                
+                if not related_uri or not relation_type:
+                    continue
+                    
+                rel_uri = relation.get("uri") or f"{property_uri}/rel/{relation_type}/{related_uri}"
+                
+                self.kg.create_bsdd_property_relation_node(
+                    uri=rel_uri,
+                    from_property_uri=property_uri,
+                    to_property_uri=related_uri,
+                    relation_type=relation_type,
+                    description=relation.get("description")
+                )
+            except Exception as e:
+                logger.warning(f"Failed to ingest property relationship: {e}")
+
+    def _ingest_allowed_values(
+        self,
+        allowed_values: List[Dict],
+        property_uri: str = None,
+        class_property_uri: str = None
+    ):
+        """Ingest allowed values for a property or class-property constraint"""
+        for av in allowed_values:
+            try:
+                # Generate URI if missing
+                av_value = av.get("value", "")
+                av_uri = av.get("uri") or f"{class_property_uri or property_uri}/av/{av_value}"
+                
+                self.kg.create_bsdd_allowed_value_node(
+                    uri=av_uri,
+                    value=av_value,
+                    property_uri=property_uri,
+                    class_property_uri=class_property_uri,
+                    description=av.get("description"),
+                    sort_number=av.get("sortNumber")
+                )
+            except Exception as e:
+                logger.warning(f"Failed to ingest allowed value: {e}")
+
     def _ingest_class_relationships(
         self,
         class_uri: str,
@@ -283,11 +445,17 @@ class BSDDIngestionPipeline:
                 
                 if not related_uri or not relation_type:
                     continue
+                    
+                # Generate a unique URI for the relationship node if not provided
+                rel_uri = relation.get("uri") or f"{class_uri}/rel/{relation_type}/{related_uri}"
                 
-                self.kg.create_class_relationship(
+                self.kg.create_bsdd_class_relation_node(
+                    uri=rel_uri,
                     from_class_uri=class_uri,
                     to_class_uri=related_uri,
-                    relation_type=relation_type
+                    relation_type=relation_type,
+                    description=relation.get("description"),
+                    fraction=relation.get("fraction")
                 )
                 
                 self.stats["relationships_created"] += 1

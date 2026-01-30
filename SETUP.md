@@ -11,6 +11,7 @@ Complete setup guide for BIMTwinOps - Digital Twin Point Cloud Platform.
 | Python | 3.10+ | `python --version` | https://www.python.org/downloads/ |
 | Node.js | 18+ | `node --version` | https://nodejs.org/ |
 | Git | Any | `git --version` | https://git-scm.com/ |
+| Java | 11+ | `java -version` | https://adoptium.net/ (for BaseX) |
 
 ### Optional (for full features)
 
@@ -18,10 +19,11 @@ Complete setup guide for BIMTwinOps - Digital Twin Point Cloud Platform.
 |----------|---------|----------|
 | Neo4j | Knowledge graph database | https://neo4j.com/download/ |
 | Ollama | Local LLM (GenAI features) | https://ollama.ai/ |
+| BaseX | XML/XQuery database for IFC/bSDD | https://basex.org/download/ |
 
 ---
 
-## Quick Start (3 commands)
+## Quick Start
 
 ```powershell
 # 1. Clone repository
@@ -31,7 +33,14 @@ cd BIMTwinOps
 # 2. Bootstrap (one-time setup)
 .\bootstrap.ps1
 
-# 3. Start all services
+# 3. Configure Environment (Optional but recommended)
+# Edit backend/.env with your Neo4j credentials
+
+# 4. Initialize Database (Required if using Neo4j)
+# Ensure your virtual environment is active or use the executable path
+& .venv\Scripts\python backend/scripts/init_neo4j_schema.py --seed
+
+# 5. Start all services
 .\start-all.ps1
 ```
 
@@ -57,6 +66,99 @@ Open http://localhost:5173 in your browser.
 | Backend API | http://localhost:8000 | FastAPI server |
 | API Docs | http://localhost:8000/docs | Swagger UI |
 | GraphQL | http://localhost:8000/api/graphql | GraphQL playground |
+| APS Service | http://localhost:3001 | Autodesk Platform Services |
+| BaseX Admin | http://localhost:8080/dba | BaseX database admin |
+
+---
+
+## External Services Setup
+
+### Neo4j Setup (Knowledge Graph)
+
+1. **Download** Neo4j Desktop from https://neo4j.com/download/
+2. **Create** a new database (e.g., `bimtwinops`)
+3. **Set password** and note it
+4. **Configure** `backend/.env`:
+   ```env
+   NEO4J_URI=bolt://localhost:7687
+   NEO4J_USER=neo4j
+   NEO4J_PASSWORD=your_password
+   ```
+
+### Ollama Setup (Local LLM)
+
+1. **Download** from https://ollama.ai/
+2. **Install** and run:
+   ```powershell
+   ollama serve
+   ollama pull llama3
+   ```
+3. **Configure** `backend/.env`:
+   ```env
+   OLLAMA_BASE_URL=http://localhost:11434
+   OLLAMA_MODEL=llama3
+   ```
+
+### BaseX Setup (XML/XQuery Database)
+
+BaseX is used for IFC/bSDD XML document storage and XQuery-based search.
+
+#### Option 1: Automatic Installation (Recommended)
+
+```powershell
+# Run the BaseX installation script
+.\scripts\start-basex.ps1
+```
+
+This will:
+- Check for Java 11+ (required)
+- Download BaseX 11.8 if not installed
+- Extract to `D:\BaseX` (configurable)
+- Start the BaseX HTTP server on port 8080
+
+#### Option 2: Manual Installation
+
+1. **Install Java 11+** (required):
+   - Download from https://adoptium.net/
+   - Verify: `java -version`
+
+2. **Download BaseX**:
+   - Download from https://basex.org/download/
+   - Get the ZIP version (e.g., `BaseX118.zip`)
+
+3. **Extract and Configure**:
+   ```powershell
+   # Extract to D:\BaseX (or your preferred location)
+   Expand-Archive -Path BaseX118.zip -DestinationPath D:\BaseX
+   
+   # Set environment variable (optional)
+   [Environment]::SetEnvironmentVariable("BASEX_HOME", "D:\BaseX", "User")
+   ```
+
+4. **Start BaseX HTTP Server**:
+   ```powershell
+   cd D:\BaseX\bin
+   .\basexhttp.bat -p 8080
+   ```
+
+5. **Configure Backend** (`backend/.env`):
+   ```env
+   BASEX_HOST=localhost
+   BASEX_PORT=8080
+   BASEX_USER=admin
+   BASEX_PASSWORD=admin
+   ```
+
+6. **Access Admin Interface**:
+   - Open http://localhost:8080/dba
+   - Default credentials: `admin` / `admin`
+
+#### BaseX Scripts Reference
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/start-basex.ps1` | Start BaseX server (auto-downloads if needed) |
+| `scripts/stop-basex.ps1` | Stop BaseX server |
 
 ---
 
@@ -66,9 +168,10 @@ Open http://localhost:5173 in your browser.
 
 | Script | Purpose |
 |--------|---------|
-| `start-all.ps1` | Start backend + frontend (shows diagnostics) |
+| `start-all.ps1` | Start backend + frontend + APS (shows diagnostics) |
 | `start-backend.ps1` | Start backend only |
 | `start-frontend.ps1` | Start frontend only |
+| `start-aps.ps1` | Start APS OAuth service only |
 | `bootstrap.ps1` | One-time setup |
 
 ### Stop Scripts
@@ -268,6 +371,28 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 1. Install Ollama from https://ollama.ai/
 2. Run `ollama serve` to start the server
 3. Pull a model: `ollama pull llama3`
+
+### Problem: BaseX won't start / Java not found
+
+**Fix:**
+1. Install Java 11+ from https://adoptium.net/
+2. Verify Java is in PATH: `java -version`
+3. If using custom Java location, set JAVA_HOME:
+   ```powershell
+   $env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-11"
+   ```
+
+### Problem: BaseX port conflict (8080)
+
+**Fix:** Change the port in `.env` and start script:
+```env
+BASEX_PORT=8984
+```
+Or start BaseX on a different port:
+```powershell
+cd D:\BaseX\bin
+.\basexhttp.bat -p 8984
+```
 
 ---
 

@@ -57,8 +57,8 @@ if (-not $SkipBackend) {
   $venvActivate = [IO.Path]::Combine($venvDir, 'Scripts', 'Activate.ps1')
   $venvPython = [IO.Path]::Combine($venvDir, 'Scripts', 'python.exe')
   
-  # Create venv if not exists
-  if (-not (Test-Path $venvPython)) {
+  # Create venv if not exists, or if activation script is missing
+  if (-not (Test-Path $venvPython) -or -not (Test-Path $venvActivate)) {
     Write-Host "  Creating virtual environment..." -ForegroundColor Yellow
     python -m venv $venvDir
   } else {

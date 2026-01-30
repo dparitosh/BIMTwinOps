@@ -10,6 +10,9 @@ export default defineConfig(({ mode }) => {
 
 	return {
 		plugins: [react(), tailwindcss()],
+		optimizeDeps: {
+			include: ["react", "react-dom", "swagger-ui-react"]
+		},
 		server: {
 			port: frontendPort,
 			strictPort: true,
