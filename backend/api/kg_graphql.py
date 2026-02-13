@@ -6,6 +6,7 @@ import os
 import logging
 from typing import List, Optional, Dict, Any
 import strawberry
+from strawberry.scalars import JSON
 from strawberry.fastapi import GraphQLRouter
 from dotenv import load_dotenv
 
@@ -421,7 +422,7 @@ class Query:
     """GraphQL Query Root"""
 
     @strawberry.field
-    def export_ifc_dictionary(self, uri: str) -> dict:
+    def export_ifc_dictionary(self, uri: str) -> JSON:
         """Export bSDD dictionary as IFC-compliant objects"""
         kg = get_kg_schema()
         # Get dictionary node

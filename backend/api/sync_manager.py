@@ -13,10 +13,10 @@ except ImportError:
     pd = None
 
 # Import services
-from bsdd_ingestion import BSDDIngestionPipeline
-from basex_client import BaseXService
-from bsdd_client import BSDDClient
-from knowledge_graph_schema import KnowledgeGraphSchema
+from .bsdd_ingestion import BSDDIngestionPipeline
+from .basex_client import BaseXService
+from .bsdd_client import BSDDClient
+from .knowledge_graph_schema import KnowledgeGraphSchema
 
 logger = logging.getLogger(__name__)
 

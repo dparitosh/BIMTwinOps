@@ -3,9 +3,9 @@ bSDD Data Ingestion Pipeline
 Fetches data from buildingSMART Data Dictionary and populates Neo4j knowledge graph
 """
 import logging
-from typing import List, Optional, Dict
-from bsdd_client import BSDDClient, BSDDEnvironment
-from knowledge_graph_schema import KnowledgeGraphSchema
+from typing import List, Optional, Dict, Any
+from .bsdd_client import BSDDClient, BSDDEnvironment
+from .knowledge_graph_schema import KnowledgeGraphSchema
 import time
 from datetime import datetime
 
