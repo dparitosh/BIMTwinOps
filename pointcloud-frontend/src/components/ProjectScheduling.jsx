@@ -50,13 +50,14 @@ export default function ProjectScheduling({
       viewerRef.current.fitToView(task.dbIds);
       
       // Apply color based on status
-      const color = new window.Autodesk.Viewing.THREE.Vector4(
-        ...hexToRgb(STATUS_COLORS[task.status] || "#666666"),
-        1
-      );
-      task.dbIds.forEach(dbId => {
-        viewerRef.current.setThemingColor(dbId, color);
-      });
+      const rawColor = STATUS_COLORS[task.status] || "#666666";
+      const rgb = hexToRgb(rawColor) || cssColorToRgb(rawColor);
+      if (rgb && window.Autodesk?.Viewing?.THREE) {
+        const color = new window.Autodesk.Viewing.THREE.Vector4(...rgb, 1);
+        task.dbIds.forEach(dbId => {
+          viewerRef.current.setThemingColor(dbId, color);
+        });
+      }
     }
   };
 
@@ -86,8 +87,8 @@ export default function ProjectScheduling({
       }
 
       if (color && task.dbIds) {
-        const rgb = hexToRgb(color) || hslToRgb(color);
-        if (rgb) {
+        const rgb = hexToRgb(color) || hslToRgb(color) || cssColorToRgb(color);
+        if (rgb && window.Autodesk?.Viewing?.THREE) {
           const threeColor = new window.Autodesk.Viewing.THREE.Vector4(...rgb, 1);
           task.dbIds.forEach(dbId => {
             viewerRef.current?.setThemingColor(dbId, threeColor);
@@ -416,4 +417,27 @@ function hslToRgb(hsl) {
   }
   
   return [r, g, b];
+}
+
+// Resolve CSS variable colors to RGB fallback values
+const CSS_COLOR_FALLBACKS = {
+  'var(--tcs-blue)': [0.13, 0.39, 0.84],
+  'var(--tcs-navy)': [0.05, 0.13, 0.33],
+  'var(--tcs-orange)': [0.96, 0.49, 0.0],
+  'var(--text-secondary)': [0.42, 0.45, 0.49],
+  'var(--text-primary)': [0.13, 0.15, 0.18],
+};
+
+function cssColorToRgb(cssVar) {
+  if (!cssVar || typeof cssVar !== 'string' || !cssVar.startsWith('var(')) return null;
+  if (CSS_COLOR_FALLBACKS[cssVar]) return CSS_COLOR_FALLBACKS[cssVar];
+  // Try to resolve from DOM
+  try {
+    const varName = cssVar.match(/var\(([^)]+)\)/)?.[1];
+    if (varName) {
+      const resolved = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+      if (resolved) return hexToRgb(resolved);
+    }
+  } catch (e) { /* ignore */ }
+  return [0.4, 0.4, 0.4]; // safe gray fallback
 }

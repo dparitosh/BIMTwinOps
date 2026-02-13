@@ -66,10 +66,13 @@ export default function AgentInterface() {
             if (update.type === "progress") {
               setMessages((prev) => {
                 const updated = [...prev];
-                const lastMsg = updated[updated.length - 1];
-                if (lastMsg.role === "agent") {
-                  lastMsg.progress = update.progress;
-                  lastMsg.status = update.status;
+                const lastIdx = updated.length - 1;
+                if (lastIdx >= 0 && updated[lastIdx].role === "agent") {
+                  updated[lastIdx] = {
+                    ...updated[lastIdx],
+                    progress: update.progress,
+                    status: update.status,
+                  };
                 }
                 return updated;
               });
@@ -77,9 +80,12 @@ export default function AgentInterface() {
               // Add new component to last agent message
               setMessages((prev) => {
                 const updated = [...prev];
-                const lastMsg = updated[updated.length - 1];
-                if (lastMsg.role === "agent") {
-                  lastMsg.components = [...(lastMsg.components || []), update.component];
+                const lastIdx = updated.length - 1;
+                if (lastIdx >= 0 && updated[lastIdx].role === "agent") {
+                  updated[lastIdx] = {
+                    ...updated[lastIdx],
+                    components: [...(updated[lastIdx].components || []), update.component],
+                  };
                 }
                 return updated;
               });
@@ -289,7 +295,7 @@ export default function AgentInterface() {
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyPress}
             placeholder="Ask about your BIM model... (e.g., 'Show me all walls with fire rating > 60')"
             disabled={loading}
             style={{

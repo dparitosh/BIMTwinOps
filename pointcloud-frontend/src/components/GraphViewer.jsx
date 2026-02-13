@@ -67,7 +67,7 @@ export default function GraphViewer({
   selectedSegmentId = null,
   uniformRadius = 10,
   backgroundColor = "#eaf2ff",
-  connectMode = "complete", // "complete" or "knn"
+  connectMode = "knn", // "complete" or "knn"
   knn = 3,
 }) {
   const fgRef = useRef();

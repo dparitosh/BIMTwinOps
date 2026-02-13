@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, Component } from "react";
 import FileUpload from "./components/FileUpload";
 import PointCloudViewer from "./components/PointCloudViewer";
 import GraphViewer from "./components/GraphViewer";
@@ -7,14 +7,43 @@ import AnnotationPanel from "./components/AnnotationPanel";
 import Loader from "./components/Loader";
 import AccBrowser from "./components/AccBrowser";
 import OssUploadTranslate from "./components/OssUploadTranslate";
-import ApsViewer from "./components/ApsViewer";
 import ApsViewerExtended, { AVAILABLE_EXTENSIONS } from "./components/ApsViewerExtended";
 import AgentInterface from "./components/AgentInterface";
 // Enterprise Pages
-import EnterpriseDashboard from "./components/EnterpriseDashboard";
 import ProjectScheduling from "./components/ProjectScheduling";
 import ModelAnalytics from "./components/ModelAnalytics";
 import "./ChatStyles.css";
+
+// Error Boundary for graceful crash recovery
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error("ErrorBoundary caught:", error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 32, textAlign: "center" }}>
+          <h2 style={{ color: "#ef4444", marginBottom: 12 }}>Something went wrong</h2>
+          <p style={{ color: "#6b7280", marginBottom: 16 }}>{this.state.error?.message}</p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "var(--tcs-blue, #2563eb)", color: "#fff", cursor: "pointer" }}
+          >
+            Try Again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const APS_API_URL =
   import.meta.env.VITE_APS_API_URL
@@ -173,6 +202,7 @@ export default function App() {
   };
 
   return (
+    <ErrorBoundary>
     <div className="min-h-screen p-5" style={{ background: 'var(--bg-primary)' }}>
       {/* TCS Header */}
       <header className="tcs-header mb-5">
@@ -308,6 +338,7 @@ export default function App() {
         />
       )}
     </div>
+    </ErrorBoundary>
   );
 }
 
@@ -335,7 +366,7 @@ function UnifiedBimViewer({ apsBaseUrl, viewerUrn, setViewerUrn, viewerAuth, set
   };
 
   // Handle model loaded
-  const handleModelLoaded = (model) => {
+  const handleModelLoaded = useCallback((model) => {
     if (!model) return;
     const instanceTree = model.getInstanceTree();
     if (instanceTree) {
@@ -345,12 +376,12 @@ function UnifiedBimViewer({ apsBaseUrl, viewerUrn, setViewerUrn, viewerAuth, set
         name: model.getDocumentNode()?.name() || "Unknown",
       });
     }
-  };
+  }, []);
 
   // Handle selection change
-  const handleSelectionChanged = (dbIds) => {
+  const handleSelectionChanged = useCallback((dbIds) => {
     setSelectedElements(dbIds);
-  };
+  }, []);
 
   return (
     <>
