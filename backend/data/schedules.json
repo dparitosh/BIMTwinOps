@@ -1,0 +1,150 @@
+{
+  "default": {
+    "id": "default",
+    "name": "Default Project",
+    "description": "Auto-seeded demo schedule",
+    "tasks": [
+      {
+        "id": "72166fff-b33f-4986-ae5f-466dd8eee7fd",
+        "project_id": "default",
+        "name": "Foundation",
+        "start": "2026-01-01",
+        "end": "2026-02-15",
+        "progress": 100,
+        "status": "completed",
+        "db_ids": [
+          1,
+          2,
+          3
+        ],
+        "category": "Foundation",
+        "assigned_to": null,
+        "notes": null,
+        "dependencies": [],
+        "created_at": "2026-02-14T08:38:43.318662+00:00",
+        "updated_at": "2026-02-14T08:38:43.318662+00:00"
+      },
+      {
+        "id": "cdf668ad-f982-471c-bf2b-e73f5980ca0b",
+        "project_id": "default",
+        "name": "Structural Steel",
+        "start": "2026-02-01",
+        "end": "2026-04-30",
+        "progress": 75,
+        "status": "in-progress",
+        "db_ids": [
+          4,
+          5,
+          6,
+          7
+        ],
+        "category": "Structural",
+        "assigned_to": null,
+        "notes": null,
+        "dependencies": [],
+        "created_at": "2026-02-14T08:38:43.318662+00:00",
+        "updated_at": "2026-02-14T08:38:43.318662+00:00"
+      },
+      {
+        "id": "04b5da19-fb18-4933-87af-c22f16074130",
+        "project_id": "default",
+        "name": "MEP Rough-In",
+        "start": "2026-03-15",
+        "end": "2026-05-30",
+        "progress": 50,
+        "status": "in-progress",
+        "db_ids": [
+          8,
+          9,
+          10
+        ],
+        "category": "MEP",
+        "assigned_to": null,
+        "notes": null,
+        "dependencies": [],
+        "created_at": "2026-02-14T08:38:43.318662+00:00",
+        "updated_at": "2026-02-14T08:38:43.318662+00:00"
+      },
+      {
+        "id": "cacbbde4-6e2a-4a27-b4a8-995015629d7f",
+        "project_id": "default",
+        "name": "Exterior Envelope",
+        "start": "2026-04-01",
+        "end": "2026-07-15",
+        "progress": 25,
+        "status": "in-progress",
+        "db_ids": [
+          11,
+          12,
+          13
+        ],
+        "category": "Envelope",
+        "assigned_to": null,
+        "notes": null,
+        "dependencies": [],
+        "created_at": "2026-02-14T08:38:43.318662+00:00",
+        "updated_at": "2026-02-14T08:38:43.318662+00:00"
+      },
+      {
+        "id": "b0e09f87-2a38-48ee-ab01-e7cd227c46c5",
+        "project_id": "default",
+        "name": "Interior Finishes",
+        "start": "2026-06-01",
+        "end": "2026-09-30",
+        "progress": 0,
+        "status": "not-started",
+        "db_ids": [
+          14,
+          15,
+          16
+        ],
+        "category": "Finishes",
+        "assigned_to": null,
+        "notes": null,
+        "dependencies": [],
+        "created_at": "2026-02-14T08:38:43.318662+00:00",
+        "updated_at": "2026-02-14T08:38:43.318662+00:00"
+      },
+      {
+        "id": "4c1011b2-d1b6-4171-a43e-86600bc187eb",
+        "project_id": "default",
+        "name": "Final MEP",
+        "start": "2026-08-01",
+        "end": "2026-10-15",
+        "progress": 0,
+        "status": "not-started",
+        "db_ids": [
+          17,
+          18
+        ],
+        "category": "MEP",
+        "assigned_to": null,
+        "notes": null,
+        "dependencies": [],
+        "created_at": "2026-02-14T08:38:43.318662+00:00",
+        "updated_at": "2026-02-14T08:38:43.318662+00:00"
+      },
+      {
+        "id": "bd506c31-228e-48fd-9b77-fa9078e455a5",
+        "project_id": "default",
+        "name": "Commissioning",
+        "start": "2026-10-01",
+        "end": "2026-11-30",
+        "progress": 0,
+        "status": "not-started",
+        "db_ids": [
+          19,
+          20
+        ],
+        "category": "Commissioning",
+        "assigned_to": null,
+        "notes": null,
+        "dependencies": [],
+        "created_at": "2026-02-14T08:38:43.318662+00:00",
+        "updated_at": "2026-02-14T08:38:43.318662+00:00"
+      }
+    ],
+    "created_at": "2026-02-14T08:38:43.302658+00:00",
+    "updated_at": "2026-02-14T08:38:43.302658+00:00"
+  }
+}

@@ -133,6 +133,14 @@ try:
 except Exception as e:
     logger.warning("Approvals API not available: %s", e)
 
+# Import and include Scheduling routes
+try:
+    from .scheduling.api import router as scheduling_router
+    app.include_router(scheduling_router)
+    logger.info("Scheduling API enabled at /api/schedules")
+except Exception as e:
+    logger.warning("Scheduling API not available: %s", e)
+
 
 @app.get("/health/neo4j")
 def health_neo4j():
