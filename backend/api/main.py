@@ -134,6 +134,17 @@ try:
 except Exception as e:
     logger.warning("Scheduling API not available: %s", e)
 
+# Import and include Point Cloud Semantic routes
+try:
+    logger.info("Attempting to import pointcloud_semantic module...")
+    from .pointcloud_semantic import router as pointcloud_router
+    logger.info(f"Successfully imported router with prefix: {pointcloud_router.prefix}")
+    logger.info(f"Router has {len(pointcloud_router.routes)} routes")
+    app.include_router(pointcloud_router)
+    logger.info("Point Cloud Semantic API enabled at /api/pointcloud")
+except Exception as e:
+    logger.error(f"Point Cloud Semantic API not available: {e}", exc_info=True)
+
 
 @app.get("/health/neo4j")
 def health_neo4j():

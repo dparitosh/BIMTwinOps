@@ -12,6 +12,7 @@ import AgentInterface from "./components/AgentInterface";
 // Enterprise Pages
 import ProjectScheduling from "./components/ProjectScheduling";
 import ModelAnalytics from "./components/ModelAnalytics";
+import { enrichBatch, checkPointCloudHealth } from "./api";
 import "./ChatStyles.css";
 
 // Error Boundary for graceful crash recovery
@@ -1061,6 +1062,68 @@ function UnifiedBimViewer({ apsBaseUrl, viewerUrn, setViewerUrn, viewerAuth, set
 function PointCloudPanel({ sceneData, selected, loading, onUpload, onPointClick, onGraphClick }) {
   const [graphExpanded, setGraphExpanded] = useState(false);
   const [hoveredNode, setHoveredNode] = useState(null);
+  const [enriching, setEnriching] = useState(false);
+  const [enrichmentData, setEnrichmentData] = useState(null);
+  const [apiHealth, setApiHealth] = useState(null);
+
+  // Check API health on mount
+  useEffect(() => {
+    checkPointCloudHealth()
+      .then(health => {
+        console.log('✅ API Health:', health);
+        setApiHealth(health);
+      })
+      .catch(err => {
+        console.error('❌ API Health check failed:', err);
+        setApiHealth({ status: 'error', error: err.message, neo4j_connected: false });
+      });
+  }, []);
+
+  // Helper to get label name from ID
+  const getLabelName = (labelId) => {
+    const labelNames = [
+      "ceiling", "floor", "wall", "beam", "column", "window", 
+      "door", "chair", "table", "bookcase", "sofa", "board", "clutter"
+    ];
+    return labelNames[labelId] || `label_${labelId}`;
+  };
+
+  // Handle enrichment
+  const handleEnrichScene = async () => {
+    if (!sceneData) return;
+    
+    setEnriching(true);
+    try {
+      // Group points by semantic label
+      const segmentMap = {};
+      sceneData.points.forEach((point, idx) => {
+        const label = sceneData.labels[idx];
+        if (!segmentMap[label]) {
+          segmentMap[label] = [];
+        }
+        segmentMap[label].push(point);
+      });
+
+      // Prepare batch payload (sample points for performance)
+      const segments = Object.entries(segmentMap).map(([label, points], idx) => ({
+        id: `seg_${idx}`,
+        semantic_label: parseInt(label),
+        points: points.slice(0, 100), // Sample for performance
+      }));
+
+      // Call enrichment API
+      const result = await enrichBatch(segments);
+      setEnrichmentData(result);
+      
+      console.log('✅ Enrichment complete:', result);
+      alert(`✅ Enriched ${result.enriched_count} segments with bSDD data!`);
+    } catch (err) {
+      console.error('❌ Enrichment failed:', err);
+      alert(`Failed to enrich segments: ${err.message}`);
+    } finally {
+      setEnriching(false);
+    }
+  };
 
   return (
     <>
@@ -1090,11 +1153,61 @@ function PointCloudPanel({ sceneData, selected, loading, onUpload, onPointClick,
             Scene Loaded
           </span>
         )}
+        {apiHealth && (
+          <span
+            className={`tcs-badge ${apiHealth.neo4j_connected ? 'tcs-badge-success' : 'tcs-badge-error'}`}
+            title={`Neo4j: ${apiHealth.neo4j_connected ? 'Connected' : 'Disconnected'} | Semantic Classes: ${apiHealth.semantic_classes_loaded || 0}`}
+            style={{ marginLeft: '8px' }}
+          >
+            {apiHealth.neo4j_connected ? '✅' : '❌'} Knowledge Graph
+          </span>
+        )}
       </div>
 
       <div className="mb-4">
         <FileUpload onUpload={onUpload} />
       </div>
+
+      {sceneData && (
+        <div className="mb-4">
+          <button
+            onClick={handleEnrichScene}
+            disabled={enriching}
+            className="tcs-button tcs-button-primary w-full"
+            style={{
+              padding: '12px 20px',
+              borderRadius: '8px',
+              border: 'none',
+              background: enriching ? 'var(--text-muted)' : 'var(--tcs-blue)',
+              color: 'white',
+              cursor: enriching ? 'not-allowed' : 'pointer',
+              fontSize: '14px',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              transition: 'all 0.2s'
+            }}
+          >
+            {enriching ? (
+              <>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                  <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
+                </svg>
+                Enriching with bSDD...
+              </>
+            ) : (
+              <>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+                Enrich with bSDD Standards
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       {loading && (
         <div className="mb-4">
@@ -1214,34 +1327,165 @@ function PointCloudPanel({ sceneData, selected, loading, onUpload, onPointClick,
               </div>
 
               {/* Info Panel */}
-              <div className="glass p-4" style={{ width: '288px', minWidth: '260px', maxWidth: '320px', flexShrink: 0, overflowY: 'auto' }}>
+              <div className="glass p-4" style={{ width: '320px', minWidth: '280px', maxWidth: '380px', flexShrink: 0, overflowY: 'auto', maxHeight: '100%' }}>
                 <div className="font-semibold mb-3 pb-2" style={{ borderBottom: '1px solid var(--border-light)', color: 'var(--text-primary)', fontSize: '14px' }}>
-                  Node Details
+                  {enrichmentData ? 'Segment Details & bSDD' : 'Node Details'}
                 </div>
                 {hoveredNode || selected ? (
                   <div className="space-y-3">
-                    {(hoveredNode || selected) && (
-                      <>
-                      <div>
-                        <div className="font-medium mb-2" style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Node ID</div>
-                        <div className="px-3 py-2 rounded" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '12px', wordBreak: 'break-all' }}>
-                          {hoveredNode?.id || selected?.segmentId}
-                        </div>
+                    {/* Basic Info */}
+                    <div>
+                      <div className="font-medium mb-2" style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Node ID</div>
+                      <div className="px-3 py-2 rounded" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '12px', wordBreak: 'break-all' }}>
+                        {hoveredNode?.id || selected?.segmentId}
                       </div>
-                      <div>
-                        <div className="font-medium mb-2" style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Label</div>
-                        <div className="px-3 py-2 rounded flex items-center gap-2" style={{ background: 'var(--tcs-blue)', color: 'white', fontSize: '13px', fontWeight: 600 }}>
-                          <svg viewBox="0 0 8 8" width="8" height="8" fill="currentColor">
-                            <circle cx="4" cy="4" r="4"/>
-                          </svg>
-                          {hoveredNode?.label || selected?.label || 'N/A'}
-                        </div>
+                    </div>
+                    <div>
+                      <div className="font-medium mb-2" style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Label</div>
+                      <div className="px-3 py-2 rounded flex items-center gap-2" style={{ background: 'var(--tcs-blue)', color: 'white', fontSize: '13px', fontWeight: 600 }}>
+                        <svg viewBox="0 0 8 8" width="8" height="8" fill="currentColor">
+                          <circle cx="4" cy="4" r="4"/>
+                        </svg>
+                        {hoveredNode?.label || getLabelName(selected?.label) || 'N/A'}
                       </div>
+                    </div>
+
+                    {/* bSDD Enrichment Data */}
+                    {enrichmentData && enrichmentData.enriched_segments && selected && (() => {
+                      const segmentEnrichment = enrichmentData.enriched_segments.find(
+                        s => s.semantic_class === getLabelName(selected.label)
+                      );
+                      
+                      if (!segmentEnrichment) return null;
+                      
+                      return (
+                        <div className="border-t pt-4 space-y-4" style={{ borderColor: 'var(--border-color)' }}>
+                          <h4 className="font-bold flex items-center gap-2" style={{ color: 'var(--tcs-blue)', fontSize: '14px' }}>
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                            </svg>
+                            bSDD Standards
+                          </h4>
+
+                          {/* IFC Entities */}
+                          {segmentEnrichment.ifc_entities && segmentEnrichment.ifc_entities.length > 0 && (
+                            <div>
+                              <div className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
+                                IFC ENTITIES ({segmentEnrichment.ifc_entities.length})
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {segmentEnrichment.ifc_entities.map((entity, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="px-2 py-1 rounded text-xs font-medium"
+                                    style={{ background: 'var(--tcs-blue)', color: 'white' }}
+                                  >
+                                    {entity}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* bSDD Classes */}
+                          {segmentEnrichment.bsdd_classes && segmentEnrichment.bsdd_classes.length > 0 && (
+                            <div>
+                              <div className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
+                                CLASSIFICATIONS ({segmentEnrichment.bsdd_classes.length})
+                              </div>
+                              <div className="space-y-3">
+                                {segmentEnrichment.bsdd_classes.slice(0, 3).map((bsddClass, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="p-3 rounded-lg"
+                                    style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}
+                                  >
+                                    <div className="font-semibold mb-1" style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                                      {bsddClass.name}
+                                    </div>
+                                    <div className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>
+                                      {bsddClass.code}
+                                    </div>
+                                    {bsddClass.definition && (
+                                      <div className="text-xs" style={{ color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                                        {bsddClass.definition.substring(0, 120)}
+                                        {bsddClass.definition.length > 120 && '...'}
+                                      </div>
+                                    )}
+                                    
+                                    {/* Properties Preview */}
+                                    {bsddClass.properties && bsddClass.properties.length > 0 && (
+                                      <div className="mt-2 pt-2" style={{ borderTop: '1px solid var(--border-color)' }}>
+                                        <div className="text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+                                          PROPERTIES ({bsddClass.properties.length})
+                                        </div>
+                                        <div className="space-y-1">
+                                          {bsddClass.properties.slice(0, 2).map((prop, pIdx) => (
+                                            <div key={pIdx} className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                                              • {prop.name} <span style={{ color: 'var(--tcs-blue)' }}>({prop.dataType})</span>
+                                            </div>
+                                          ))}
+                                          {bsddClass.properties.length > 2 && (
+                                            <div className="text-xs" style={{ color: 'var(--tcs-blue)', cursor: 'pointer' }}>
+                                              +{bsddClass.properties.length - 2} more...
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Relations Preview */}
+                                    {bsddClass.relations && bsddClass.relations.length > 0 && (
+                                      <div className="mt-2 pt-2" style={{ borderTop: '1px solid var(--border-color)' }}>
+                                        <div className="text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+                                          RELATIONS ({bsddClass.relations.length})
+                                        </div>
+                                        <div className="flex flex-wrap gap-1">
+                                          {bsddClass.relations.slice(0, 3).map((rel, rIdx) => (
+                                            <span
+                                              key={rIdx}
+                                              className="px-2 py-1 rounded text-xs"
+                                              style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
+                                            >
+                                              {rel.relationType}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                                {segmentEnrichment.bsdd_classes.length > 3 && (
+                                  <div className="text-xs text-center" style={{ color: 'var(--tcs-blue)', cursor: 'pointer' }}>
+                                    +{segmentEnrichment.bsdd_classes.length - 3} more classifications
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Confidence Score */}
+                          {segmentEnrichment.confidence !== undefined && (
+                            <div className="p-2 rounded" style={{ background: 'var(--bg-primary)' }}>
+                              <div className="text-xs flex items-center justify-between">
+                                <span style={{ color: 'var(--text-secondary)' }}>Confidence:</span>
+                                <span style={{ color: 'var(--tcs-blue)', fontWeight: 600 }}>
+                                  {(segmentEnrichment.confidence * 100).toFixed(0)}%
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Original Properties */}
+                    {!enrichmentData && (
                       <div>
                         <div className="font-medium mb-2" style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Properties</div>
                         <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: '13px' }}>
                           <tbody>
-                            {hoveredNode?.segment_key && (
+                            {hoveredNode?.segment_key !== undefined && (
                               <tr style={{ borderBottom: '1px solid var(--border-light)' }}>
                                 <td className="py-1" style={{ color: 'var(--text-secondary)' }}>Segment Key</td>
                                 <td className="py-1 text-right" style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
@@ -1268,17 +1512,18 @@ function PointCloudPanel({ sceneData, selected, loading, onUpload, onPointClick,
                           </tbody>
                         </table>
                       </div>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-8" style={{ color: 'var(--text-muted)' }}>
-                  <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-3 opacity-40">
-                    <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
-                  </svg>
-                  <div style={{ fontSize: '13px', lineHeight: '1.5' }}>Hover over a graph node<br/>or select a segment<br/>to view details</div>
-                </div>
-              )}
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8" style={{ color: 'var(--text-muted)' }}>
+                    <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-3 opacity-40">
+                      <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                    <div style={{ fontSize: '13px', lineHeight: '1.5' }}>
+                      {enrichmentData ? 'Select a segment to view bSDD data' : 'Hover over a graph node or select a segment'}
+                    </div>
+                  </div>
+                )}
             </div>
           </div>
         )}
