@@ -66,20 +66,23 @@ Write-Host "--- Configuration ---" -ForegroundColor Cyan
 # Frontend port (can be overridden via FRONTEND_PORT env var)
 $frontendPort = if ($env:FRONTEND_PORT) { [int]$env:FRONTEND_PORT } else { 5173 }
 
-$apiBaseUrl = "http://localhost:8000"
-$apsServiceUrl = "http://localhost:3001"
+$apiBaseUrl = "http://127.0.0.1:8000"
+$apsServiceUrl = "http://127.0.0.1:3001"
 
 if (Test-Path ".env") {
   Write-Host "[OK] .env file: Found" -ForegroundColor Green
   $content = Get-Content ".env" -Raw
   
-  if ($content -match "VITE_API_BASE_URL\s*=\s*([^\s\r\n]+)") { $apiBaseUrl = $Matches[1] }
-  if ($content -match "VITE_APS_SERVICE_URL\s*=\s*([^\s\r\n]+)") { $apsServiceUrl = $Matches[1] }
+  if ($content -match "VITE_BACKEND_API_URL\s*=\s*([^\s\r\n]+)") { $apiBaseUrl = $Matches[1] }
+  if ($content -match "VITE_APS_API_URL\s*=\s*([^\s\r\n]+)") { $apsServiceUrl = $Matches[1] }
 } else {
   Write-Host "[!] .env file: Creating default..." -ForegroundColor Yellow
   @"
-VITE_API_BASE_URL=http://localhost:8000
-VITE_APS_SERVICE_URL=http://localhost:3001
+VITE_BACKEND_API_URL=http://127.0.0.1:8000
+VITE_APS_API_URL=http://127.0.0.1:3001
+VITE_OLLAMA_URL=http://localhost:11434
+VITE_NEO4J_URI=bolt://localhost:7687
+VITE_FRONTEND_PORT=5173
 "@ | Out-File -FilePath ".env" -Encoding UTF8
   Write-Host "[OK] .env file: Created" -ForegroundColor Green
 }

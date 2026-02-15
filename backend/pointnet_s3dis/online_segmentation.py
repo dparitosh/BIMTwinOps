@@ -1,10 +1,17 @@
 # online_segmentation.py
 
 import os
+import sys
 import numpy as np
 import torch
 from neo4j import GraphDatabase
 
+# Allow importing centralized config when running from backend/
+_backend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+
+from api.config import cfg  # noqa: E402
 from pointnet_s3dis.src.models.pointnet import PointNetSegmentation
 
 # --------------------------- Config ---------------------------
@@ -14,10 +21,6 @@ LABEL_MAP = {
     4: "column", 5: "window", 6: "door", 7: "chair",
     8: "table", 9: "bookcase", 10: "sofa", 11: "board", 12: "clutter"
 }
-
-NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")  # Required - no default for security
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -204,23 +207,25 @@ def build_segments(points_xyz, labels):
 
 # ----------------------- 5. Neo4j writing ----------------------
 
-def write_scene_to_neo4j(scene_id, segments, edges, uri=NEO4J_URI, user=NEO4J_USER, password=None, create_near_relationships=True):
+def write_scene_to_neo4j(scene_id, segments, edges, uri=None, user=None, password=None, create_near_relationships=True):
     """
-    Writes segments to Neo4j with spatial properties:
-      - seg.centroid_point  => Neo4j point({x,y,z})
-      - seg.centroid        => original list
-      - seg.bbox_min, seg.bbox_max => arrays [x,y,z]
-      - seg.bbox_center     => Neo4j point({x,y,z})
-    Optionally creates NEAR relationships using edges list.
-    """
-    password = password or NEO4J_PASSWORD
-    if not password:
-        raise ValueError("NEO4J_PASSWORD environment variable is required")
-    
-    driver = GraphDatabase.driver(uri, auth=(user, password))
-    with driver.session() as session:
-        session.run("MERGE (sc:Scene {id: $id})", id=scene_id)
+    Writes PointCloudSegment nodes to Neo4j with spatial properties.
+    Uses centralized config (cfg) for Neo4j connection + database.
 
+    Schema-aligned labels:
+      PointCloudSegment  (was 'Segment')
+    Schema-aligned properties:
+      segmentId, semanticLabel, pointCount  (instead of id, semantic_name, num_points)
+    Schema-aligned relationships:
+      NEAR  (spatial proximity)
+    """
+    uri = uri or cfg.NEO4J_URI
+    user = user or cfg.NEO4J_USER
+    password = password or cfg.NEO4J_PASSWORD
+    database = cfg.NEO4J_DATABASE
+
+    driver = GraphDatabase.driver(uri, auth=(user, password))
+    with driver.session(database=database) as session:
         for seg in segments:
             seg_label = seg["segment_key"]
             seg_id = f"{scene_id}_sem_{seg_label}"
@@ -235,30 +240,27 @@ def write_scene_to_neo4j(scene_id, segments, edges, uri=NEO4J_URI, user=NEO4J_US
 
             session.run(
                 """
-                MERGE (seg:Segment {id: $id})
-                SET seg.scene_id = $scene_id,
-                    seg.semantic_id = $semantic_id,
-                    seg.semantic_name = $semantic_name,
+                MERGE (seg:PointCloudSegment {segmentId: $segmentId})
+                SET seg.sceneId = $scene_id,
+                    seg.semanticId = $semantic_id,
+                    seg.semanticLabel = $semantic_label,
                     seg.centroid = $centroid,
-                    seg.centroid_point = point({x:$cx, y:$cy, z:$cz}),
-                    seg.bbox_min = $bbox_min,
-                    seg.bbox_max = $bbox_max,
-                    seg.bbox_center = point({x:$center_x, y:$center_y, z:$center_z}),
-                    seg.num_points = $num_points
-                WITH seg
-                MATCH (s:Scene {id: $scene_id})
-                MERGE (seg)-[:PART_OF]->(s)
+                    seg.centroidPoint = point({x:$cx, y:$cy, z:$cz}),
+                    seg.bboxMin = $bbox_min,
+                    seg.bboxMax = $bbox_max,
+                    seg.bboxCenter = point({x:$center_x, y:$center_y, z:$center_z}),
+                    seg.pointCount = $point_count
                 """,
-                id=seg_id,
+                segmentId=seg_id,
                 scene_id=scene_id,
                 semantic_id=seg["semantic_id"],
-                semantic_name=seg["semantic_name"],
+                semantic_label=seg["semantic_name"],
                 centroid=seg["centroid"],
                 cx=float(cx), cy=float(cy), cz=float(cz),
                 bbox_min=bbox_min,
                 bbox_max=bbox_max,
                 center_x=float(center_x), center_y=float(center_y), center_z=float(center_z),
-                num_points=seg["num_points"],
+                point_count=seg["num_points"],
             )
 
         if create_near_relationships and edges:
@@ -268,7 +270,7 @@ def write_scene_to_neo4j(scene_id, segments, edges, uri=NEO4J_URI, user=NEO4J_US
                 dist = float(e.get("distance", 0.0))
                 session.run(
                     """
-                    MATCH (a:Segment {id:$id1}), (b:Segment {id:$id2})
+                    MATCH (a:PointCloudSegment {segmentId:$id1}), (b:PointCloudSegment {segmentId:$id2})
                     MERGE (a)-[r:NEAR]-(b)
                     SET r.distance = $dist
                     """,

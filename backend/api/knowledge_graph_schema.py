@@ -84,12 +84,17 @@ class KnowledgeGraphSchema:
         "VERSION_OF": "VERSION_OF"
     }
     
-    def __init__(self, neo4j_uri: str, neo4j_user: str, neo4j_password: str):
+    def __init__(self, neo4j_uri: str, neo4j_user: str, neo4j_password: str, database: str = None):
         """Initialize connection to Neo4j database"""
         self.driver = GraphDatabase.driver(
             neo4j_uri,
             auth=(neo4j_user, neo4j_password)
         )
+        self._database = database
+    
+    def _session(self):
+        """Create a session targeting the configured database"""
+        return self.driver.session(database=self._database)
     
     def close(self):
         """Close Neo4j driver connection"""
@@ -100,13 +105,13 @@ class KnowledgeGraphSchema:
         Execute a Cypher query and return results
         Helper method for GraphQL resolvers
         """
-        with self.driver.session() as session:
+        with self._session() as session:
             result = session.run(query, parameters)
             return [record.data() for record in result]
     
     def create_schema(self):
         """Create all constraints and indexes for the knowledge graph"""
-        with self.driver.session() as session:
+        with self._session() as session:
             # Create constraints for unique identifiers
             constraints = [
                 # IFC Elements
@@ -204,7 +209,7 @@ class KnowledgeGraphSchema:
         RETURN d
         """
         
-        with self.driver.session() as session:
+        with self._session() as session:
             result = session.run(query, {
                 "uri": uri,
                 "name": name,
@@ -267,7 +272,7 @@ class KnowledgeGraphSchema:
         RETURN c
         """
         
-        with self.driver.session() as session:
+        with self._session() as session:
             result = session.run(query, {
                 "uri": uri,
                 "code": code,
@@ -303,7 +308,7 @@ class KnowledgeGraphSchema:
         RETURN p
         """
         
-        with self.driver.session() as session:
+        with self._session() as session:
             result = session.run(query, {
                 "uri": uri,
                 "code": code,
@@ -335,7 +340,7 @@ class KnowledgeGraphSchema:
         RETURN r
         """
         
-        with self.driver.session() as session:
+        with self._session() as session:
             session.run(query, {
                 "class_uri": class_uri,
                 "property_uri": property_uri,
@@ -369,7 +374,7 @@ class KnowledgeGraphSchema:
         RETURN r
         """
         
-        with self.driver.session() as session:
+        with self._session() as session:
             session.run(query, {
                 "from_uri": from_class_uri,
                 "to_uri": to_class_uri,
@@ -392,7 +397,7 @@ class KnowledgeGraphSchema:
         RETURN r
         """
         
-        with self.driver.session() as session:
+        with self._session() as session:
             session.run(query, {
                 "ifc_global_id": ifc_global_id,
                 "bsdd_class_uri": bsdd_class_uri,
@@ -415,7 +420,7 @@ class KnowledgeGraphSchema:
         RETURN r
         """
         
-        with self.driver.session() as session:
+        with self._session() as session:
             session.run(query, {
                 "segment_id": segment_id,
                 "bsdd_class_uri": bsdd_class_uri,
@@ -453,7 +458,7 @@ class KnowledgeGraphSchema:
         RETURN cp
         """
         
-        with self.driver.session() as session:
+        with self._session() as session:
             result = session.run(query, {
                 "uri": uri,
                 "class_uri": class_uri,
@@ -505,7 +510,7 @@ class KnowledgeGraphSchema:
             
         query += "RETURN av"
         
-        with self.driver.session() as session:
+        with self._session() as session:
             result = session.run(query, {
                 "uri": uri,
                 "value": value,
@@ -544,7 +549,7 @@ class KnowledgeGraphSchema:
         RETURN cr
         """
         
-        with self.driver.session() as session:
+        with self._session() as session:
             result = session.run(query, {
                 "uri": uri,
                 "from_uri": from_class_uri,
@@ -582,7 +587,7 @@ class KnowledgeGraphSchema:
         RETURN pr
         """
         
-        with self.driver.session() as session:
+        with self._session() as session:
             result = session.run(query, {
                 "uri": uri,
                 "from_uri": from_property_uri,
@@ -608,7 +613,7 @@ class KnowledgeGraphSchema:
         RETURN {{uri: child.uri, name: child.name, code: child.code}} as child
         """
         
-        with self.driver.session() as session:
+        with self._session() as session:
              parents = session.run(parent_query, {"uri": uri}).value()
              children = session.run(child_query, {"uri": uri}).data()
              
@@ -637,7 +642,7 @@ class KnowledgeGraphSchema:
         }} as classProperty
         ORDER BY cp.sortNumber ASC
         """
-        with self.driver.session() as session:
+        with self._session() as session:
             return session.run(query, {"uri": uri}).value()
 
     def get_class_relations(self, uri: str) -> List[Dict]:
@@ -658,7 +663,7 @@ class KnowledgeGraphSchema:
             }}
         }} as relation
         """
-        with self.driver.session() as session:
+        with self._session() as session:
              return session.run(query, {"uri": uri}).value()
 
     def get_property_allowed_values(self, uri: str) -> List[Dict]:
@@ -674,7 +679,7 @@ class KnowledgeGraphSchema:
         }} as allowedValue
         ORDER BY av.sortNumber ASC
         """
-        with self.driver.session() as session:
+        with self._session() as session:
             return session.run(query, {"uri": uri}).value()
 
     def get_property_relations(self, uri: str) -> List[Dict]:
@@ -692,12 +697,12 @@ class KnowledgeGraphSchema:
             }}
         }} as relation
         """
-        with self.driver.session() as session:
+        with self._session() as session:
              return session.run(query, {"uri": uri}).value()
 
     def get_schema_info(self) -> Dict:
         """Get information about the current schema"""
-        with self.driver.session() as session:
+        with self._session() as session:
             # Get node counts
             node_query = """
             MATCH (n)
@@ -747,7 +752,7 @@ class KnowledgeGraphSchema:
             where.append("n.status = $status")
             params['status'] = status
         if dictionary_uri:
-            where.append("n.dictionaryUri = $dictionary_uri OR n.dictionary_uri = $dictionary_uri")
+            where.append("EXISTS { (n)-[:IN_DICTIONARY]->(d:BsddDictionary {uri: $dictionary_uri}) }")
             params['dictionary_uri'] = dictionary_uri
         if description:
             where.append("toLower(n.definition) CONTAINS toLower($desc)")
@@ -757,7 +762,7 @@ class KnowledgeGraphSchema:
         cypher.append("RETURN n LIMIT $limit")
         params['limit'] = limit
         query_str = "\n".join(cypher)
-        with self.driver.session() as session:
+        with self._session() as session:
             return [r['n'] for r in session.run(query_str, params)]
 
 
@@ -772,9 +777,10 @@ if __name__ == "__main__":
         raise ValueError("Set NEO4J_PASSWORD environment variable")
     
     schema = KnowledgeGraphSchema(
-        neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-        neo4j_user=os.getenv("NEO4J_USER", "neo4j"),
-        neo4j_password=neo4j_password
+        neo4j_uri=os.getenv("NEO4J_URI", ""),
+        neo4j_user=os.getenv("NEO4J_USER", ""),
+        neo4j_password=neo4j_password,
+        database=os.getenv("NEO4J_DATABASE")
     )
     
     try:

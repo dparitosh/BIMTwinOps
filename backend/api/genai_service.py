@@ -24,9 +24,10 @@ class BIMTwinOpsGenAI:
         azure_api_key: str,
         azure_api_version: str = "2024-08-01-preview",
         deployment_name: str = "gpt-4o",
-        neo4j_uri: str = "bolt://localhost:7687",
-        neo4j_user: str = "neo4j",
-        neo4j_password: Optional[str] = None
+        neo4j_uri: str = "",
+        neo4j_user: str = "",
+        neo4j_password: Optional[str] = None,
+        neo4j_database: Optional[str] = None
     ):
         """
         Initialize GenAI service
@@ -39,7 +40,10 @@ class BIMTwinOpsGenAI:
             neo4j_uri: Neo4j connection URI
             neo4j_user: Neo4j username
             neo4j_password: Neo4j password
+            neo4j_database: Neo4j database name (default: from NEO4J_DATABASE env)
         """
+        from api.config import cfg
+
         self.client = AzureOpenAI(
             azure_endpoint=azure_endpoint,
             api_key=azure_api_key,
@@ -48,8 +52,7 @@ class BIMTwinOpsGenAI:
         self.deployment = deployment_name
         
         # Validate Neo4j password is provided
-        if not neo4j_password:
-            neo4j_password = os.getenv("NEO4J_PASSWORD")
+        neo4j_password = neo4j_password or cfg.NEO4J_PASSWORD
         if not neo4j_password:
             raise ValueError("neo4j_password is required - set NEO4J_PASSWORD env var or pass explicitly")
         
@@ -57,6 +60,11 @@ class BIMTwinOpsGenAI:
             neo4j_uri,
             auth=(neo4j_user, neo4j_password)
         )
+        self._neo4j_database = neo4j_database or cfg.NEO4J_DATABASE
+
+    def _session(self):
+        """Return a Neo4j session targeting the configured database."""
+        return self.neo4j_driver.session(database=self._neo4j_database)
         
         # System prompts for different tasks
         self.system_prompts = {
@@ -142,7 +150,7 @@ Return suggestions in JSON format with: {enrichments: [{type, target, suggestion
                 return []
             
             # Execute Cypher query
-            with self.neo4j_driver.session() as session:
+            with self._session() as session:
                 results = session.run(
                     cypher_result["cypher_query"],
                     cypher_result.get("parameters", {})
@@ -227,7 +235,7 @@ Node Types:
 - BsddClass (uri, code, name, definition, classType, relatedIfcEntities)
 - BsddProperty (uri, code, name, definition, dataType, units)
 - IfcElement (globalId, name, ifcType, properties)
-- PointCloudSegment (segmentId, label, semanticClass, pointCount)
+- PointCloudSegment (segmentId, semanticLabel, confidence, pointCount)
 - SemanticClass (label, classId, name, color)
 
 Relationship Types:
@@ -379,7 +387,7 @@ Return JSON with this structure:
         """
         
         try:
-            with self.neo4j_driver.session() as session:
+            with self._session() as session:
                 results = session.run(query, {
                     "element_type": element_type,
                     "search_term": element_type.replace("Ifc", "")
@@ -465,7 +473,7 @@ Suggest the most appropriate classifications. Return JSON:
         """
         
         try:
-            with self.neo4j_driver.session() as session:
+            with self._session() as session:
                 results = session.run(query, {"keywords": keywords}).data()
                 return results
         except Exception as e:
@@ -541,9 +549,9 @@ if __name__ == "__main__":
         azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
         azure_api_key=os.getenv("AZURE_OPENAI_API_KEY"),
         deployment_name=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o"),
-        neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-        neo4j_user=os.getenv("NEO4J_USER", "neo4j"),
-        neo4j_password=os.getenv("NEO4J_PASSWORD", "password")
+        neo4j_uri=os.getenv("NEO4J_URI", ""),
+        neo4j_user=os.getenv("NEO4J_USER", ""),
+        neo4j_password=os.getenv("NEO4J_PASSWORD")
     )
     
     try:

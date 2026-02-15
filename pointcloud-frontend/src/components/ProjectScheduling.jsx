@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import ApsViewerExtended from "./ApsViewerExtended";
 
-const API_URL = import.meta.env.VITE_BACKEND_API_URL || (import.meta.env.DEV ? "" : "http://127.0.0.1:8000");
+const API_URL = import.meta.env.VITE_BACKEND_API_URL || "http://127.0.0.1:8000";
 
 const STATUS_COLORS = {
   "completed": "#10b981",

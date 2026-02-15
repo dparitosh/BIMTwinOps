@@ -15,6 +15,7 @@ References:
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import logging
 import json
@@ -67,9 +68,10 @@ class Neo4jMCPServer:
     
     def __init__(
         self,
-        uri: str = "bolt://localhost:7687",
-        user: str = "neo4j",
-        password: Optional[str] = None
+        uri: str = "",
+        user: str = "",
+        password: Optional[str] = None,
+        database: Optional[str] = None
     ):
         """
         Initialize Neo4j MCP Server
@@ -78,6 +80,7 @@ class Neo4jMCPServer:
             uri: Neo4j connection URI
             user: Neo4j username
             password: Neo4j password (required)
+            database: Neo4j database name (default: from NEO4J_DATABASE env)
         """
         if not password:
             raise ValueError("Neo4j password is required")
@@ -85,6 +88,7 @@ class Neo4jMCPServer:
         self.uri = uri
         self.user = user
         self.password = password
+        self._database = database or os.getenv("NEO4J_DATABASE", "neo4j")
         self.server = Server("neo4j-mcp-server")
         
         # Register tool handlers
@@ -97,6 +101,10 @@ class Neo4jMCPServer:
         if self.driver is None:
             raise RuntimeError("Neo4j driver not initialized")
         return self.driver
+
+    def _session(self):
+        """Return a Neo4j session targeting the configured database."""
+        return self._require_driver().session(database=self._database)
 
     def connect(self):
         """Establish connection to Neo4j database."""
@@ -336,7 +344,7 @@ class Neo4jMCPServer:
         if 'LIMIT' not in query_upper:
             query = f"{query} LIMIT {limit}"
         
-        with self._require_driver().session() as session:
+        with self._session() as session:
             result = session.run(query, parameters or {})
             
             records = []
@@ -364,19 +372,25 @@ class Neo4jMCPServer:
         
         created_ids = []
         
-        with self._require_driver().session() as session:
+        with self._session() as session:
             for node_def in nodes:
                 labels = ':'.join(node_def['labels'])
                 properties = node_def['properties']
                 
-                # Create Cypher query
-                query = f"""
-                CREATE (n:{labels})
-                SET n = $properties
-                RETURN elementId(n) as id
-                """
-                
-                result = session.run(query, {"properties": properties})
+                # Use MERGE for idempotency when uri is available
+                if 'uri' in properties:
+                    query = f"""
+                    MERGE (n:{labels} {{uri: $uri}})
+                    SET n += $properties
+                    RETURN elementId(n) as id
+                    """
+                    result = session.run(query, {"uri": properties["uri"], "properties": properties})
+                else:
+                    query = f"""
+                    MERGE (n:{labels} $properties)
+                    RETURN elementId(n) as id
+                    """
+                    result = session.run(query, {"properties": properties})
                 record = result.single()
                 if record:
                     created_ids.append(record["id"])
@@ -395,19 +409,19 @@ class Neo4jMCPServer:
         
         created_count = 0
         
-        with self._require_driver().session() as session:
+        with self._session() as session:
             for rel_def in relationships:
                 from_uri = rel_def['from_uri']
                 to_uri = rel_def['to_uri']
                 rel_type = rel_def['type']
                 properties = rel_def.get('properties', {})
                 
-                # Create relationship
+                # Use MERGE for idempotency
                 query = f"""
                 MATCH (from {{uri: $from_uri}})
                 MATCH (to {{uri: $to_uri}})
-                CREATE (from)-[r:{rel_type}]->(to)
-                SET r = $properties
+                MERGE (from)-[r:{rel_type}]->(to)
+                SET r += $properties
                 RETURN elementId(r) as id
                 """
                 
@@ -434,7 +448,7 @@ class Neo4jMCPServer:
     ) -> Dict[str, Any]:
         """Update properties of a node or relationship"""
 
-        with self._require_driver().session() as session:
+        with self._session() as session:
             if target_type == "node":
                 if merge:
                     query = """
@@ -470,7 +484,7 @@ class Neo4jMCPServer:
 
         deleted: List[Dict[str, Any]] = []
 
-        with self._require_driver().session() as session:
+        with self._session() as session:
             for uri in uris:
                 # Count first to report whether it existed
                 count_result = session.run(
@@ -505,9 +519,10 @@ async def main():
     import os
     
     # Get configuration from environment
-    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    neo4j_user = os.getenv("NEO4J_USER", "neo4j")
+    neo4j_uri = os.getenv("NEO4J_URI", "")
+    neo4j_user = os.getenv("NEO4J_USER", "")
     neo4j_password = os.getenv("NEO4J_PASSWORD")
+    neo4j_database = os.getenv("NEO4J_DATABASE", "neo4j")
     
     if not neo4j_password:
         raise ValueError("NEO4J_PASSWORD environment variable is required")
@@ -516,7 +531,8 @@ async def main():
     server_instance = Neo4jMCPServer(
         uri=neo4j_uri,
         user=neo4j_user,
-        password=neo4j_password
+        password=neo4j_password,
+        database=neo4j_database
     )
     
     # Run stdio server

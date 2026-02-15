@@ -33,22 +33,26 @@ if not NEO4J_URI or not NEO4J_USER or not NEO4J_PASSWORD:
     raise RuntimeError("Missing Neo4j configuration. Set NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD in .env")
 
 def connect():
-    print(f"[INFO] Connecting to Neo4j at {NEO4J_URI} as {NEO4J_USER}")
+    print(f"[INFO] Connecting to Neo4j at {NEO4J_URI} as {NEO4J_USER} (database={NEO4J_DATABASE})")
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
     return driver
 
+def _session(driver):
+    """Return a session targeting the configured database."""
+    return driver.session(database=NEO4J_DATABASE)
+
 def list_scenes(driver):
-    with driver.session() as s:
-        recs = s.run("MATCH (seg:Segment) RETURN DISTINCT seg.scene_id AS scene_id ORDER BY scene_id").values()
+    with _session(driver) as s:
+        recs = s.run("MATCH (seg:PointCloudSegment) RETURN DISTINCT seg.sceneId AS sceneId ORDER BY sceneId").values()
         scenes = [r[0] for r in recs]
     return scenes
 
 def fetch_segments(driver, scene_id):
-    with driver.session() as s:
+    with _session(driver) as s:
         rows = s.run(
-            "MATCH (seg:Segment {scene_id:$scene_id}) "
-            "RETURN seg.id AS id, seg.centroid_point AS pt, seg.centroid AS centroid",
-            scene_id=scene_id
+            "MATCH (seg:PointCloudSegment {sceneId:$sceneId}) "
+            "RETURN seg.segmentId AS id, seg.centroidPoint AS pt, seg.centroid AS centroid",
+            sceneId=scene_id
         ).data()
     return rows
 
@@ -100,7 +104,7 @@ def compute_and_write_knn(driver, scene_id, k=5, verbose=False):
         return
 
     # Optionally remove existing knn NEAR relations for this scene to avoid duplicates
-    with driver.session() as s:
+    with _session(driver) as s:
         s.run("MATCH ()-[r:NEAR {method:'knn'}]-() DELETE r")
         if verbose:
             print("[INFO] Deleted previous NEAR {method:'knn'} relationships")
@@ -119,10 +123,10 @@ def compute_and_write_knn(driver, scene_id, k=5, verbose=False):
         dists.sort(key=lambda x: x[0])
         neighbors = dists[:k]
         # write neighbors
-        with driver.session() as s:
+        with _session(driver) as s:
             for rank, (dist, nid) in enumerate(neighbors, start=1):
                 s.run(
-                    "MATCH (a:Segment {id:$id_a}), (b:Segment {id:$id_b}) "
+                    "MATCH (a:PointCloudSegment {segmentId:$id_a}), (b:PointCloudSegment {segmentId:$id_b}) "
                     "MERGE (a)-[r:NEAR {method:'knn'}]-(b) "
                     "SET r.distance = $dist, r.k_rank = $rank",
                     id_a=id_i, id_b=nid, dist=float(dist), rank=rank
@@ -134,10 +138,10 @@ def compute_and_write_knn(driver, scene_id, k=5, verbose=False):
     print(f"[INFO] Created/updated approximately {created} NEAR relationships (undirected)")
 
     # verification counts
-    with driver.session() as s:
+    with _session(driver) as s:
         count_rels = s.run(
-            "MATCH (a:Segment {scene_id:$scene_id})-[r:NEAR {method:'knn'}]-(b:Segment {scene_id:$scene_id}) RETURN count(r) AS cnt",
-            scene_id=scene_id
+            "MATCH (a:PointCloudSegment {sceneId:$sceneId})-[r:NEAR {method:'knn'}]-(b:PointCloudSegment {sceneId:$sceneId}) RETURN count(r) AS cnt",
+            sceneId=scene_id
         ).single().get("cnt", 0)
     print(f"[VERIFY] NEAR { 'knn' } relationships in scene '{scene_id}': {count_rels}")
 

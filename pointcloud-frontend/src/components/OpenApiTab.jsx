@@ -10,8 +10,10 @@
  */
 import React, { useState, useEffect, useCallback } from "react";
 
-const API_URL = import.meta.env.VITE_BACKEND_API_URL || (import.meta.env.DEV ? "" : "http://127.0.0.1:8000");
+const API_URL = import.meta.env.VITE_BACKEND_API_URL || "http://127.0.0.1:8000";
 const APS_URL = import.meta.env.VITE_APS_API_URL || "http://127.0.0.1:3001";
+const OLLAMA_URL = import.meta.env.VITE_OLLAMA_URL || "http://localhost:11434";
+const NEO4J_URI = import.meta.env.VITE_NEO4J_URI || "bolt://localhost:7687";
 
 // ── Agent Registry ──────────────────────────────────────────────────────
 const AGENTS = [
@@ -126,7 +128,7 @@ export default function OpenApiTab() {
       checkHealth(`${API_URL}/docs`),
       checkHealth(`${API_URL}/health/neo4j`),
       checkHealth(`${APS_URL}/aps/config`),
-      checkHealth("http://localhost:11434/api/version"),
+      checkHealth(`${OLLAMA_URL}/api/version`),
     ]);
     setHealthResults({ backend, neo4j, aps, ollama });
     setHealthLoading(false);
@@ -198,8 +200,8 @@ export default function OpenApiTab() {
 function HealthSection({ results, loading, onRefresh }) {
   const services = [
     { key: "backend", label: "Backend API", url: `${API_URL}`, icon: "⚙️", desc: "FastAPI server (port 8000)" },
-    { key: "neo4j",   label: "Neo4j KG",    url: "bolt://localhost:7687",     icon: "🔗", desc: "Knowledge Graph database" },
-    { key: "ollama",  label: "Ollama LLM",   url: "http://localhost:11434",    icon: "🧠", desc: "Local AI model server" },
+    { key: "neo4j",   label: "Neo4j KG",    url: NEO4J_URI,     icon: "🔗", desc: "Knowledge Graph database" },
+    { key: "ollama",  label: "Ollama LLM",   url: OLLAMA_URL,    icon: "🧠", desc: "Local AI model server" },
     { key: "aps",     label: "APS Service",  url: `${APS_URL}`,               icon: "🏗️", desc: "Autodesk Platform Services" },
   ];
 

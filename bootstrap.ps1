@@ -128,8 +128,11 @@ if (-not $SkipFrontend) {
     $frontendEnv = [IO.Path]::Combine($frontendDir, '.env')
     if (-not (Test-Path $frontendEnv)) {
       @"
-VITE_API_BASE_URL=http://localhost:8000
-VITE_APS_SERVICE_URL=http://localhost:3001
+VITE_BACKEND_API_URL=http://127.0.0.1:8000
+VITE_APS_API_URL=http://127.0.0.1:3001
+VITE_OLLAMA_URL=http://localhost:11434
+VITE_NEO4J_URI=bolt://localhost:7687
+VITE_FRONTEND_PORT=5173
 "@ | Out-File -FilePath $frontendEnv -Encoding UTF8
       Write-Host "  Created pointcloud-frontend/.env" -ForegroundColor Green
     }

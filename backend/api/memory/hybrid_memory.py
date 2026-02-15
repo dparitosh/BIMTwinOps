@@ -53,17 +53,18 @@ class OpenSearchConfig:
     
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 9200,
-        username: str = "admin",
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        username: Optional[str] = None,
         password: Optional[str] = None,
         use_ssl: bool = False,
         verify_certs: bool = False
     ):
-        self.host = host
-        self.port = port
-        self.username = username
-        self.password = password or os.getenv("OPENSEARCH_PASSWORD", "admin")  # Default for local dev only
+        from ..config import cfg
+        self.host = host or cfg.OPENSEARCH_HOST
+        self.port = port or cfg.OPENSEARCH_PORT
+        self.username = username or cfg.OPENSEARCH_USER
+        self.password = password or cfg.OPENSEARCH_PASSWORD
         self.use_ssl = use_ssl
         self.verify_certs = verify_certs
     

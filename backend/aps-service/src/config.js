@@ -29,8 +29,7 @@ export function getConfig() {
 
   // CORS
   const APS_CORS_ORIGINS = splitList(
-    process.env.APS_CORS_ORIGINS
-      || 'http://localhost:5173 http://127.0.0.1:5173 http://localhost:3001 http://127.0.0.1:3001'
+    process.env.APS_CORS_ORIGINS || ''
   );
 
   // Cache/session store

@@ -146,29 +146,24 @@ def create_llm(*, temperature: float = 0.7, model: str = "gpt-4o") -> Any:
 
     Controlled by env var `LLM_PROVIDER` ("ollama" or "azure").
     """
+    from ..config import cfg
 
-    llm_provider = os.getenv("LLM_PROVIDER", "ollama").lower().strip()
+    llm_provider = cfg.LLM_PROVIDER.lower().strip()
 
     if llm_provider == "ollama":
-        ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
-        logger.info("Using Ollama LLM: %s at %s", ollama_model, ollama_url)
-        return OllamaClient(base_url=ollama_url, model=ollama_model, temperature=temperature)
+        logger.info("Using Ollama LLM: %s at %s", cfg.OLLAMA_MODEL, cfg.OLLAMA_BASE_URL)
+        return OllamaClient(base_url=cfg.OLLAMA_BASE_URL, model=cfg.OLLAMA_MODEL, temperature=temperature)
 
     # Azure OpenAI
-    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-    api_key = os.getenv("AZURE_OPENAI_API_KEY")
-    deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", os.getenv("AZURE_OPENAI_DEPLOYMENT", model))
-    api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
-
-    if not endpoint or not api_key:
+    if not cfg.AZURE_OPENAI_ENDPOINT or not cfg.AZURE_OPENAI_API_KEY:
         raise RuntimeError("LLM_PROVIDER=azure requires AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY")
 
+    deployment = cfg.AZURE_OPENAI_DEPLOYMENT or model
     logger.info("Using Azure OpenAI deployment: %s", deployment)
     return AzureOpenAIClient(
-        endpoint=endpoint,
-        api_key=api_key,
+        endpoint=cfg.AZURE_OPENAI_ENDPOINT,
+        api_key=cfg.AZURE_OPENAI_API_KEY,
         deployment_name=deployment,
-        api_version=api_version,
+        api_version=cfg.AZURE_OPENAI_API_VERSION,
         temperature=temperature,
     )

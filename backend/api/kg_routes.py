@@ -10,8 +10,8 @@ from typing import List, Dict, Optional, Any
 from fastapi import APIRouter, HTTPException, Query, Body, UploadFile, File, BackgroundTasks, Depends, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from dotenv import load_dotenv
 
+from .config import cfg
 from .bsdd_client import BSDDClient, BSDDEnvironment
 from .knowledge_graph_schema import KnowledgeGraphSchema
 from .genai_service import BIMTwinOpsGenAI
@@ -29,8 +29,6 @@ from .ifc_mapping import (
     map_bsdd_property_to_ifc_property_single_value,
     map_bsdd_material_to_ifc_material
 )
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -57,16 +55,16 @@ def get_kg_schema() -> KnowledgeGraphSchema:
     """Get or create knowledge graph schema singleton"""
     global _kg_schema
     if _kg_schema is None:
-        neo4j_password = os.getenv("NEO4J_PASSWORD")
-        if not neo4j_password:
+        if not cfg.NEO4J_PASSWORD:
             raise HTTPException(
                 status_code=500,
                 detail="NEO4J_PASSWORD environment variable is required"
             )
         _kg_schema = KnowledgeGraphSchema(
-            neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-            neo4j_user=os.getenv("NEO4J_USER", "neo4j"),
-            neo4j_password=neo4j_password
+            neo4j_uri=cfg.NEO4J_URI,
+            neo4j_user=cfg.NEO4J_USER,
+            neo4j_password=cfg.NEO4J_PASSWORD,
+            database=cfg.NEO4J_DATABASE
         )
     return _kg_schema
 
@@ -93,22 +91,19 @@ def get_genai_service() -> BIMTwinOpsGenAI:
     """Get or create GenAI service singleton"""
     global _genai_service
     if _genai_service is None:
-        azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-        azure_api_key = os.getenv("AZURE_OPENAI_API_KEY")
-        
-        if not azure_endpoint or not azure_api_key:
+        if not cfg.AZURE_OPENAI_ENDPOINT or not cfg.AZURE_OPENAI_API_KEY:
             raise HTTPException(
                 status_code=500,
                 detail="Azure OpenAI credentials not configured"
             )
         
         _genai_service = BIMTwinOpsGenAI(
-            azure_endpoint=azure_endpoint,
-            azure_api_key=azure_api_key,
-            deployment_name=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o"),
-            neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-            neo4j_user=os.getenv("NEO4J_USER", "neo4j"),
-            neo4j_password=os.getenv("NEO4J_PASSWORD")
+            azure_endpoint=cfg.AZURE_OPENAI_ENDPOINT,
+            azure_api_key=cfg.AZURE_OPENAI_API_KEY,
+            deployment_name=cfg.AZURE_OPENAI_DEPLOYMENT,
+            neo4j_uri=cfg.NEO4J_URI,
+            neo4j_user=cfg.NEO4J_USER,
+            neo4j_password=cfg.NEO4J_PASSWORD
         )
     return _genai_service
 
@@ -789,7 +784,7 @@ async def execute_cypher(
     try:
         kg = get_kg_schema()
         
-        with kg.driver.session() as session:
+        with kg._session() as session:
             result = session.run(query, parameters or {})
             data = result.data()
         
@@ -826,7 +821,7 @@ async def health_check():
     
     try:
         kg = get_kg_schema()
-        with kg.driver.session() as session:
+        with kg._session() as session:
             session.run("RETURN 1")
         health["neo4j"] = "healthy"
     except Exception as e:

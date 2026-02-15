@@ -568,9 +568,10 @@ if __name__ == "__main__":
         raise ValueError("NEO4J_PASSWORD environment variable is required")
     
     kg_schema = KnowledgeGraphSchema(
-        neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-        neo4j_user=os.getenv("NEO4J_USER", "neo4j"),
-        neo4j_password=neo4j_password
+        neo4j_uri=os.getenv("NEO4J_URI", ""),
+        neo4j_user=os.getenv("NEO4J_USER", ""),
+        neo4j_password=neo4j_password,
+        database=os.getenv("NEO4J_DATABASE")
     )
     
     try:

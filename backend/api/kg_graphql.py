@@ -8,8 +8,8 @@ from typing import List, Optional, Dict, Any
 import strawberry
 from strawberry.scalars import JSON
 from strawberry.fastapi import GraphQLRouter
-from dotenv import load_dotenv
 
+from .config import cfg
 from .knowledge_graph_schema import KnowledgeGraphSchema
 from .bsdd_client import BSDDClient, BSDDEnvironment
 from .ifc_mapping import (
@@ -18,8 +18,6 @@ from .ifc_mapping import (
     map_bsdd_property_to_ifc_property_single_value,
     map_bsdd_material_to_ifc_material
 )
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +30,13 @@ def get_kg_schema() -> KnowledgeGraphSchema:
     """Get or create knowledge graph schema singleton"""
     global _kg_schema
     if _kg_schema is None:
-        neo4j_password = os.getenv("NEO4J_PASSWORD")
-        if not neo4j_password:
+        if not cfg.NEO4J_PASSWORD:
             raise ValueError("NEO4J_PASSWORD environment variable is required")
         _kg_schema = KnowledgeGraphSchema(
-            neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-            neo4j_user=os.getenv("NEO4J_USER", "neo4j"),
-            neo4j_password=neo4j_password
+            neo4j_uri=cfg.NEO4J_URI,
+            neo4j_user=cfg.NEO4J_USER,
+            neo4j_password=cfg.NEO4J_PASSWORD,
+            database=cfg.NEO4J_DATABASE
         )
     return _kg_schema
 
@@ -500,22 +498,25 @@ class Query:
         kg = get_kg_schema()
         query = """
         MATCH (c:BsddClass {uri: $uri})
-        RETURN c
+        OPTIONAL MATCH (c)-[:IN_DICTIONARY]->(d:BsddDictionary)
+        OPTIONAL MATCH (parent:BsddClass)-[:IS_PARENT_OF]->(c)
+        RETURN c, d.uri AS dictionaryUri, parent.uri AS parentClassUri
         """
         result = kg.execute_query(query, {"uri": uri})
         
         if not result:
             return None
         
-        class_data = dict(result[0]["c"])
+        record = result[0]
+        class_data = dict(record["c"])
         return BsddClass(
             uri=class_data.get("uri", ""),
             code=class_data.get("code", ""),
             name=class_data.get("name", ""),
             definition=class_data.get("definition"),
             class_type=class_data.get("classType"),
-            dictionary_uri=class_data.get("dictionaryUri"),
-            parent_class_uri=class_data.get("parentClassUri"),
+            dictionary_uri=record.get("dictionaryUri"),
+            parent_class_uri=record.get("parentClassUri"),
             related_ifc_entities=class_data.get("relatedIfcEntities", []),
             synonyms=class_data.get("synonyms", [])
         )
@@ -540,7 +541,7 @@ class Query:
         kg = get_kg_schema()
         where_clauses = []
         if dictionary_uri:
-            where_clauses.append("c.dictionaryUri = $dictionary_uri")
+            where_clauses.append("EXISTS { (c)-[:IN_DICTIONARY]->(d:BsddDictionary {uri: $dictionary_uri}) }")
         if class_type:
             where_clauses.append("c.classType = $class_type")
         if ifc_entity:

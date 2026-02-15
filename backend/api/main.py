@@ -8,13 +8,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import requests
-from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from neo4j import GraphDatabase, basic_auth
 
 from pointnet_s3dis.online_segmentation import process_uploaded_array
+
+# Centralized config — loads .env and provides all settings
+from .config import cfg
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,27 +30,18 @@ except ImportError:
     print("Warning: Generative UI module not available")
 
 
-env_path = Path(__file__).resolve().parent.parent / ".env"
-if env_path.exists():
-    load_dotenv(env_path)
-else:
-    logger.warning(
-        "Missing .env file at %s. Copy .env.example to .env and configure for full functionality.",
-        env_path,
-    )
-
-# All configuration from .env - no hardcoded defaults
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-NEO4J_URI = os.getenv("NEO4J_URI")
-NEO4J_USER = os.getenv("NEO4J_USER")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
-NEO4J_DATABASE = os.getenv("NEO4J_DATABASE")
+# All configuration from centralized config (backend/.env)
+GOOGLE_API_KEY = cfg.GOOGLE_API_KEY
+NEO4J_URI = cfg.NEO4J_URI
+NEO4J_USER = cfg.NEO4J_USER
+NEO4J_PASSWORD = cfg.NEO4J_PASSWORD
+NEO4J_DATABASE = cfg.NEO4J_DATABASE
 
 # Ollama configuration (local LLM)
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
-OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text:latest")
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")  # "ollama" or "gemini"
+OLLAMA_BASE_URL = cfg.OLLAMA_BASE_URL
+OLLAMA_MODEL = cfg.OLLAMA_MODEL
+OLLAMA_EMBED_MODEL = cfg.OLLAMA_EMBED_MODEL
+LLM_PROVIDER = cfg.LLM_PROVIDER
 
 driver = None
 if not NEO4J_URI or not NEO4J_USER or not NEO4J_PASSWORD:
@@ -75,10 +68,10 @@ DISALLOWED = re.compile(
 CODEBLOCK_RE = re.compile(r"```(?:cypher)?\s*([\s\S]*?)```", re.I)
 
 SYSTEM_PROMPT_GEN_CYPHER = (
-    "Schema: (:Scene {id}), (:Segment {id, scene_id, semantic_name, centroid_point, num_points}).\n"
-    "Rules: generate ONE safe READ-ONLY Cypher query only. Use label :Segment (never :Object). "
-    "Use property semantic_name (never category). Use point.distance(a,b) for distances. "
-    "Always include WHERE seg.scene_id = '<SCENE_ID>' when a scene_id is provided.\n\n"
+    "Schema: (:PointCloudSegment {segmentId, sceneId, semanticLabel, centroidPoint, pointCount}).\n"
+    "Rules: generate ONE safe READ-ONLY Cypher query only. Use label :PointCloudSegment (never :Segment or :Object). "
+    "Use property semanticLabel (never category or semantic_name). Use point.distance(a,b) for distances. "
+    "Always include WHERE seg.sceneId = '<SCENE_ID>' when a scene_id is provided.\n\n"
     "Output format (exactly):\n```cypher\n<MATCH ...>\n<RETURN ...>\n```\n\n"
     "If impossible, output exactly:\n```cypher\n# EMPTY\n```\n"
     "After the code block add one short English sentence explanation."
@@ -95,7 +88,7 @@ COUNT_RE = re.compile(r"(how many|number of|count of)\s+([a-z0-9 _-]+)", re.I)
 LIST_RE = re.compile(r"(find|show|list|what are|give me)\s+(?:all|every)?\s*([a-z0-9 _-]+)", re.I)
 
 app = FastAPI(title="BIMTwinOps API", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173","http://127.0.0.1:5173",], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=cfg.CORS_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # Import and include Knowledge Graph routes
 try:
@@ -406,9 +399,9 @@ def fallback_pattern_cypher(question: str, scene_id: Optional[str]) -> Tuple[str
         a = m.group(1).strip()
         b = m.group(2).strip()
         cy = (
-            f"MATCH (a:Segment {{scene_id: '{scene_id}'}}), (b:Segment {{scene_id: '{scene_id}'}}) "
-            f"WHERE toLower(a.semantic_name) CONTAINS toLower('{a}') AND toLower(b.semantic_name) CONTAINS toLower('{b}') "
-            f"RETURN a.id AS a_id, b.id AS b_id, point.distance(a.centroid_point, b.centroid_point) AS dist LIMIT 10"
+            f"MATCH (a:PointCloudSegment {{sceneId: '{scene_id}'}}), (b:PointCloudSegment {{sceneId: '{scene_id}'}}) "
+            f"WHERE toLower(a.semanticLabel) CONTAINS toLower('{a}') AND toLower(b.semanticLabel) CONTAINS toLower('{b}') "
+            f"RETURN a.segmentId AS a_id, b.segmentId AS b_id, point.distance(a.centroidPoint, b.centroidPoint) AS dist LIMIT 10"
         )
         return cy, f"Distance between {a} and {b}"
     m2 = WITHIN_RE.search(q)
@@ -416,20 +409,20 @@ def fallback_pattern_cypher(question: str, scene_id: Optional[str]) -> Tuple[str
         meters = float(m2.group(2))
         target = m2.group(4).strip()
         cy = (
-            f"MATCH (t:Segment {{scene_id: '{scene_id}'}}) "
-            f"WHERE toLower(t.semantic_name) CONTAINS toLower('{target}') "
+            f"MATCH (t:PointCloudSegment {{sceneId: '{scene_id}'}}) "
+            f"WHERE toLower(t.semanticLabel) CONTAINS toLower('{target}') "
             f"WITH t "
-            f"MATCH (o:Segment {{scene_id: '{scene_id}'}}) "
-            f"WHERE o.id <> t.id AND point.distance(t.centroid_point, o.centroid_point) <= {meters} "
-            f"RETURN o.id AS id, o.semantic_name AS semantic_name, point.distance(t.centroid_point, o.centroid_point) AS dist LIMIT 200"
+            f"MATCH (o:PointCloudSegment {{sceneId: '{scene_id}'}}) "
+            f"WHERE o.segmentId <> t.segmentId AND point.distance(t.centroidPoint, o.centroidPoint) <= {meters} "
+            f"RETURN o.segmentId AS id, o.semanticLabel AS semanticLabel, point.distance(t.centroidPoint, o.centroidPoint) AS dist LIMIT 200"
         )
         return cy, f"Objects within {meters} m of {target}"
     m3 = COUNT_RE.search(q)
     if m3 and scene_id:
         sem = m3.group(2).strip().split()[0]
         cy = (
-            f"MATCH (s:Segment {{scene_id: '{scene_id}'}}) "
-            f"WHERE toLower(s.semantic_name) CONTAINS toLower('{sem}') "
+            f"MATCH (s:PointCloudSegment {{sceneId: '{scene_id}'}}) "
+            f"WHERE toLower(s.semanticLabel) CONTAINS toLower('{sem}') "
             f"RETURN count(s) AS count"
         )
         return cy, f"Count of {sem}"
@@ -437,9 +430,9 @@ def fallback_pattern_cypher(question: str, scene_id: Optional[str]) -> Tuple[str
     if m4 and scene_id:
         sem = m4.group(2).strip().split()[0]
         cy = (
-            f"MATCH (s:Segment {{scene_id: '{scene_id}'}}) "
-            f"WHERE toLower(s.semantic_name) CONTAINS toLower('{sem}') "
-            f"RETURN s.id AS id, s.semantic_name AS semantic_name, s.num_points AS num_points LIMIT 200"
+            f"MATCH (s:PointCloudSegment {{sceneId: '{scene_id}'}}) "
+            f"WHERE toLower(s.semanticLabel) CONTAINS toLower('{sem}') "
+            f"RETURN s.segmentId AS id, s.semanticLabel AS semanticLabel, s.pointCount AS pointCount LIMIT 200"
         )
         return cy, f"List segments matching {sem}"
     return "", ""
@@ -627,14 +620,14 @@ async def chat(req: ChatReq):
 
     # conservative rewrite if empty results
     if not rows:
-        cy_rewrite = cypher.replace(":Object", ":Segment").replace("category", "semantic_name").replace("scene:", "scene_id:")
+        cy_rewrite = cypher.replace(":Object", ":PointCloudSegment").replace(":Segment ", ":PointCloudSegment ").replace("category", "semanticLabel").replace("semantic_name", "semanticLabel").replace("scene_id:", "sceneId:")
         if cy_rewrite != cypher:
             try:
                 rows2 = run_cypher_and_serialize(cy_rewrite)
                 if rows2:
                     rows = rows2
                     cypher = cy_rewrite
-                    llm_explain = (llm_explain or "") + " (rewritten to :Segment/semantic_name)"
+                    llm_explain = (llm_explain or "") + " (rewritten to :PointCloudSegment/semanticLabel)"
             except Exception:
                 pass
 
