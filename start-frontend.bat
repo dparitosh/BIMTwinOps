@@ -28,8 +28,11 @@ REM Create .env if not exists
 if not exist ".env" (
     echo Creating default .env file...
     (
-        echo VITE_API_BASE_URL=http://localhost:8000
-        echo VITE_APS_SERVICE_URL=http://localhost:3001
+        echo VITE_BACKEND_API_URL=http://127.0.0.1:8000
+        echo VITE_APS_API_URL=http://127.0.0.1:3001
+        echo VITE_OLLAMA_URL=http://localhost:11434
+        echo VITE_NEO4J_URI=bolt://localhost:7687
+        echo VITE_FRONTEND_PORT=5173
     ) > .env
 )
 

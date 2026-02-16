@@ -45,17 +45,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def init_schema(uri: str, user: str, password: str) -> bool:
+def init_schema(uri: str, user: str, password: str, database: str = None) -> bool:
     """Initialize Neo4j schema with constraints and indexes."""
     from api.knowledge_graph_schema import KnowledgeGraphSchema
     
-    logger.info("Connecting to Neo4j at %s...", uri)
+    logger.info("Connecting to Neo4j at %s (database=%s)...", uri, database or 'default')
     
     try:
         schema = KnowledgeGraphSchema(
             neo4j_uri=uri,
             neo4j_user=user,
-            neo4j_password=password
+            neo4j_password=password,
+            database=database
         )
         
         logger.info("Creating schema constraints and indexes...")
@@ -75,7 +76,7 @@ def init_schema(uri: str, user: str, password: str) -> bool:
         return False
 
 
-def seed_sample_data(uri: str, user: str, password: str) -> bool:
+def seed_sample_data(uri: str, user: str, password: str, database: str = None) -> bool:
     """Seed Neo4j with sample bSDD data for development."""
     from api.knowledge_graph_schema import KnowledgeGraphSchema
     
@@ -85,17 +86,18 @@ def seed_sample_data(uri: str, user: str, password: str) -> bool:
         schema = KnowledgeGraphSchema(
             neo4j_uri=uri,
             neo4j_user=user,
-            neo4j_password=password
+            neo4j_password=password,
+            database=database
         )
         
         # Sample bSDD Dictionary
         logger.info("  Creating sample bSDD dictionary...")
         schema.create_bsdd_dictionary_node(
             uri="https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
-            name="IFC 4.3",
+            name="IFC",
             version="4.3",
             organization_code="buildingsmart",
-            status="Active",
+            status="Preview",
             language_code="en",
             license="CC BY-ND 4.0"
         )
@@ -175,7 +177,7 @@ def seed_sample_data(uri: str, user: str, password: str) -> bool:
         
         # Link properties to classes
         logger.info("  Linking properties to classes...")
-        with schema.driver.session() as session:
+        with schema._session() as session:
             # FireRating for Wall
             session.run("""
                 MATCH (c:BsddClass {code: 'IfcWall'})
@@ -216,7 +218,7 @@ def seed_sample_data(uri: str, user: str, password: str) -> bool:
         
         logger.info("  Creating semantic classes for point cloud...")
         for sc in semantic_classes:
-            with schema.driver.session() as session:
+            with schema._session() as session:
                 session.run("""
                     MERGE (sc:SemanticClass {label: $label})
                     SET sc.classId = $class_id,
@@ -238,13 +240,13 @@ def main():
     )
     parser.add_argument(
         "--uri",
-        default=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-        help="Neo4j connection URI (default: bolt://localhost:7687)"
+        default=os.getenv("NEO4J_URI", ""),
+        help="Neo4j connection URI (or set NEO4J_URI env var)"
     )
     parser.add_argument(
         "--user",
-        default=os.getenv("NEO4J_USER", "neo4j"),
-        help="Neo4j username (default: neo4j)"
+        default=os.getenv("NEO4J_USER", ""),
+        help="Neo4j username (or set NEO4J_USER env var)"
     )
     parser.add_argument(
         "--password",
@@ -255,6 +257,11 @@ def main():
         "--seed",
         action="store_true",
         help="Seed sample bSDD data for development"
+    )
+    parser.add_argument(
+        "--database",
+        default=os.getenv("NEO4J_DATABASE"),
+        help="Neo4j database name (or set NEO4J_DATABASE env var)"
     )
     parser.add_argument(
         "--skip-schema",
@@ -272,12 +279,12 @@ def main():
     
     # Initialize schema
     if not args.skip_schema:
-        if not init_schema(args.uri, args.user, args.password):
+        if not init_schema(args.uri, args.user, args.password, args.database):
             success = False
     
     # Seed sample data
     if args.seed:
-        if not seed_sample_data(args.uri, args.user, args.password):
+        if not seed_sample_data(args.uri, args.user, args.password, args.database):
             success = False
     
     sys.exit(0 if success else 1)

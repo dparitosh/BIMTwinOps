@@ -88,29 +88,52 @@ Copy `.env.example` to `.env` and configure:
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=your_password
+NEO4J_DATABASE=bimtwin
 
-# Azure OpenAI
+# LLM Provider (azure_openai | ollama)
+LLM_PROVIDER=ollama
+
+# Ollama (local LLM)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2:1b
+
+# Azure OpenAI (cloud LLM)
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
 AZURE_OPENAI_API_KEY=your_key
 AZURE_OPENAI_DEPLOYMENT=gpt-4o
+
+# BaseX XML Database
+BASEX_HOST=localhost
+BASEX_PORT=1984
+BASEX_USER=admin
+BASEX_PASSWORD=admin
+BASEX_DB=bimtwinops
+
+# OpenSearch
+OPENSEARCH_HOST=localhost
+OPENSEARCH_PORT=9200
+
+# Redis (caching & sessions)
+REDIS_HOST=localhost
+REDIS_PORT=6379
 ```
 
 ### 3. Initialize Knowledge Graph Schema
 ```powershell
-cd D:\SMART_BIM\backend\api
-python knowledge_graph_schema.py
+cd D:\SMART_BIM\backend
+python scripts/init_neo4j_schema.py --seed
 ```
 
 ### 4. Ingest bSDD Data (Optional)
 ```powershell
-# Ingest IFC 4.3 dictionary
-python bsdd_ingestion.py
+cd D:\SMART_BIM\backend
+python -m api.bsdd_ingestion
 ```
 
 ### 5. Start Backend Server
 ```powershell
-cd D:\SMART_BIM\backend\api
-uvicorn main:app --reload --port 8001
+cd D:\SMART_BIM\backend
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## API Endpoints
@@ -218,37 +241,161 @@ Content-Type: application/json
 GET /api/kg/health
 ```
 
+### GraphQL Endpoint
+
+#### GraphiQL Interactive UI
+```http
+GET /api/graphql
+```
+Browse to `http://localhost:8000/api/graphql` for the interactive GraphiQL explorer.
+
+#### GraphQL Queries
+```http
+POST /api/graphql
+Content-Type: application/json
+
+{
+  "query": "{ bsddClasses(limit: 5) { uri name code classType dictionaryUri } }"
+}
+```
+
+Supported root queries:
+- `bsddDictionaries` — list all dictionaries
+- `bsddClasses(dictionaryUri, limit, offset)` — list/filter classes
+- `bsddClass(uri)` — single class with properties, relations, hierarchy
+- `bsddProperties(classUri, limit)` — list properties
+- `kgStats` — node/relationship counts
+
+### Additional KG Endpoints
+
+The KG router (`/api/kg`) exposes 34 endpoints beyond the ones documented above:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/suggest-fixes` | AI-powered fix suggestions |
+| POST | `/check-compliance` | Compliance checking |
+| POST | `/validate-ids-reference` | IDS reference validation |
+| GET | `/ids-uri/dictionary` | Resolve dictionary URI |
+| GET | `/ids-uri/class` | Resolve class URI |
+| GET | `/ids-uri/property` | Resolve property URI |
+| GET | `/ids-uri/material` | Resolve material URI |
+| POST | `/batch-associate/classes` | Batch class association |
+| GET | `/export-ifc/{uri}` | Export as IFC |
+| GET | `/export/{uri}` | Generic export |
+| POST | `/import/json` | Import JSON data |
+| POST | `/import/excel` | Import Excel data |
+| POST | `/validate` | Validate data |
+| GET | `/classes/{uri}/hierarchy` | Class hierarchy |
+| GET | `/classes/{uri}/properties` | Class properties |
+| GET | `/classes/{uri}/relations` | Class relations |
+| GET | `/properties/{uri}/allowed-values` | Property allowed values |
+| GET | `/properties/{uri}/relations` | Property relations |
+| GET | `/search/advanced` | Advanced search |
+| PUT | `/dictionaries/{uri}/status` | Update dictionary status |
+| GET | `/dictionaries/{uri}/versions` | Dictionary versions |
+| POST | `/dictionaries/{uri}/translate` | Translate dictionary |
+| DELETE | `/dictionaries/{uri}` | Delete dictionary |
+
+Main app also exposes:
+- `GET /health/neo4j` — Neo4j connectivity check
+- `POST /upload` — Point cloud upload + segmentation
+- `POST /chat` — LLM chat with KG context
+
 ## Code Structure
 
 ```
-backend/api/
-├── bsdd_client.py              # bSDD API client (GraphQL + REST)
-├── knowledge_graph_schema.py   # Neo4j schema definition
-├── bsdd_ingestion.py          # Data ingestion pipeline
-├── genai_service.py           # Azure OpenAI GenAI service
-├── kg_routes.py               # FastAPI routes for KG/AI
-├── main.py                    # Main FastAPI application
-└── requirements.txt           # Python dependencies
+backend/
+├── api/
+│   ├── config.py                   # Centralized configuration singleton
+│   ├── main.py                     # Main FastAPI application (66 routes)
+│   ├── bsdd_client.py             # bSDD API client (GraphQL + REST)
+│   ├── bsdd_ingestion.py          # Data ingestion pipeline
+│   ├── knowledge_graph_schema.py  # Neo4j schema definition & management
+│   ├── kg_routes.py               # FastAPI routes for KG/AI/bSDD (34 endpoints)
+│   ├── kg_graphql.py             # Strawberry GraphQL API + GraphiQL UI
+│   ├── genai_service.py          # LLM GenAI service (Azure OpenAI / Ollama)
+│   ├── basex_client.py           # BaseX XML/JSON database client
+│   ├── requirements.txt          # Python dependencies
+│   ├── agents/                    # Multi-agent orchestration (planning, query, action)
+│   ├── approvals/                 # Approval workflow API & store
+│   ├── generative_ui/            # Dynamic UI component generation
+│   ├── mcp_host/                 # Model Context Protocol host
+│   ├── mcp_servers/              # MCP tool servers (neo4j, bsdd, opensearch, basex)
+│   ├── memory/                   # Hybrid memory (short + long term)
+│   └── security/                 # Security layer & middleware
+├── scripts/
+│   └── init_neo4j_schema.py      # Schema initialization & seed data
+└── pointnet_s3dis/               # PointNet++ point cloud segmentation
 ```
 
 ## Knowledge Graph Schema
 
-### Node Types
-- **BsddDictionary**: Standard dictionaries (IFC, Uniclass, etc.)
-- **BsddClass**: Classifications (walls, doors, etc.)
-- **BsddProperty**: Standardized properties
-- **BsddUnit**: Units of measurement
-- **IfcElement**: IFC building elements
-- **PointCloudSegment**: Segmented point cloud data
-- **SemanticClass**: Semantic labels (13 classes from PointNet)
+### Node Types (17 labels)
 
-### Relationships
-- `IN_DICTIONARY`: Class belongs to dictionary
-- `HAS_PROPERTY`: Class has property
-- `IS_PARENT_OF` / `IS_SUBCLASS_OF`: Class hierarchy
+**Building Model Nodes:**
+- **IfcElement**: IFC building elements (walls, doors, windows, etc.)
+- **IfcSpace**: IFC spatial zones
+- **IfcBuilding**: IFC building entities
+- **IfcStorey**: IFC building storeys
+
+**Point Cloud Nodes:**
+- **PointCloudSegment**: Segmented point cloud data (`segmentId`, `semanticLabel`, `confidence`, `pointCount`)
+- **SemanticClass**: Semantic labels (13 classes from PointNet++)
+
+**bSDD Standard Nodes:**
+- **BsddDictionary**: Standard dictionaries (IFC, Uniclass, etc.)
+- **BsddClass**: Classifications (IfcWall, IfcDoor, etc.)
+- **BsddProperty**: Standardized properties (AcousticRating, FireRating, etc.)
+- **BsddClassProperty**: Class-specific property bindings
+- **BsddUnit**: Units of measurement
+- **BsddAllowedValue**: Enumerated allowed values for properties
+- **BsddClassRelation**: Inter-class relationships
+- **BsddPropertyRelation**: Inter-property relationships
+
+**General Nodes:**
+- **Property**: Generic property definitions
+- **Classification**: Classification system entries
+- **Material**: Material definitions
+
+### Relationships (26 types)
+
+**Spatial:**
+- `CONTAINS`: Spatial containment (building → storeys → spaces)
+- `LOCATED_IN`: Element location within a space
+- `CONNECTED_TO`: Physical connection between elements
+- `NEAR`: Proximity relationship (point cloud KNN)
+
+**Classification:**
+- `HAS_CLASSIFICATION`: Element has classification
+- `CLASSIFIED_AS`: Element classified as type
+- `IS_SUBCLASS_OF`: Class inheritance (child → parent)
+- `IS_PARENT_OF`: Inverse hierarchy (parent → child)
+- `HAS_PARENT_CLASS`: Direct parent class reference
+
+**Property:**
+- `HAS_PROPERTY`: Class/element has property
+- `HAS_CLASS_PROPERTY`: Class has class-specific property binding
+- `REFERENCES_PROPERTY`: Class property references a global property
+- `PROPERTY_OF`: Property belongs to element
+- `HAS_ALLOWED_VALUE`: Property has enumerated value
+- `HAS_UNIT`: Property has unit of measurement
+
+**bSDD:**
 - `MAPS_TO_BSDD`: IFC/PC element maps to bSDD class
+- `IFC_ENTITY_MAPPING`: IFC entity to bSDD mapping
 - `RELATED_TO`: Related classifications
-- `IFC_ENTITY_MAPPING`: IFC entity relationships
+- `EQUIVALENT_TO`: Equivalent classes across dictionaries
+- `HAS_CLASS_RELATION`: Class has relation to another class
+- `HAS_PROPERTY_RELATION`: Property has relation to another property
+
+**Point Cloud:**
+- `SEGMENT_OF`: Segment belongs to scan
+- `HAS_SEMANTIC_LABEL`: Segment has semantic class label
+- `CORRESPONDS_TO`: Point cloud segment corresponds to IFC element
+
+**Dictionary Organization:**
+- `IN_DICTIONARY`: Class/property belongs to dictionary
+- `VERSION_OF`: Dictionary version lineage
 
 ## Usage Examples
 
@@ -256,7 +403,7 @@ backend/api/
 ```python
 import requests
 
-response = requests.get("http://localhost:8001/api/kg/bsdd/ifc-mappings/IfcWall")
+response = requests.get("http://localhost:8000/api/kg/bsdd/ifc-mappings/IfcWall")
 mappings = response.json()
 
 for mapping in mappings["mappings"]:
@@ -268,7 +415,7 @@ for mapping in mappings["mappings"]:
 import requests
 
 response = requests.post(
-    "http://localhost:8001/api/kg/ai/recommend-properties",
+    "http://localhost:8000/api/kg/ai/recommend-properties",
     json={
         "element_type": "IfcWindow",
         "context": {"phase": "construction", "region": "US"}
@@ -285,7 +432,7 @@ for prop in properties:
 import requests
 
 response = requests.post(
-    "http://localhost:8001/api/kg/ai/semantic-search",
+    "http://localhost:8000/api/kg/ai/semantic-search",
     json={
         "query": "What are the thermal properties for exterior walls?",
         "context_type": "bsdd",
@@ -310,7 +457,7 @@ messages = [
 
 for msg in messages:
     response = requests.post(
-        "http://localhost:8001/api/kg/ai/chat",
+        "http://localhost:8000/api/kg/ai/chat",
         json={
             "message": msg,
             "conversation_history": conversation
@@ -337,7 +484,8 @@ from bsdd_ingestion import BSDDIngestionPipeline
 client = BSDDClient(environment=BSDDEnvironment.PRODUCTION)
 kg = KnowledgeGraphSchema(neo4j_uri="bolt://localhost:7687", 
                           neo4j_user="neo4j", 
-                          neo4j_password="password")
+                          neo4j_password="password",
+                          database="bimtwin")
 
 # Create schema
 kg.create_schema()
@@ -351,7 +499,7 @@ pipeline.ingest_ifc_dictionary(version="4.3")
 ```python
 pipeline.ingest_all_dictionaries(
     organization_filter=["buildingsmart", "digibase"],
-    status_filter="Active"
+    status_filter="Preview"  # IFC 4.3 uses status "Preview"
 )
 ```
 
@@ -427,11 +575,32 @@ Solution: Reduce context size, use smaller models for simple queries, implement 
 - [ ] Automated data quality validation
 - [ ] Export to IDS (Information Delivery Specification)
 
+## bSDD API Cross-Validation (IFC 4.3)
+
+Validated against live bSDD API on 2026-02-15:
+
+| Field | Live API Value |
+|-------|---------------|
+| Dictionary Name | **IFC** |
+| Dictionary URI | `https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3` |
+| Version | **4.3** |
+| Status | **Preview** |
+| Organization | buildingSMART International |
+| Total Classes | **2163** |
+| Languages | 17 (EN, DE, ES, JA, NL, NO, PT, RU, ZH, IT, PL, DA, CS, PT-BR, SV, HR, IS) |
+| License | CC BY-ND 4.0 |
+| Class structure | `Uri`, `Code`, `Name`, `ClassType`, `ReferenceCode`, `ParentClassCode` |
+| Property structure | `PropertyCode`, `DataType`, `PropertySet`, `PropertyValueKind`, `AllowedValues` |
+| Class hierarchy (e.g. IfcWall) | IfcRoot → IfcObjectDefinition → IfcObject → IfcProduct → IfcElement → IfcBuiltElement → IfcWall |
+
+> **Note**: The seed data in `init_neo4j_schema.py` uses `name="IFC"` and `status="Preview"` to match the live API.
+
 ## References
 
 - **bSDD Documentation**: https://github.com/buildingSMART/bSDD
 - **bSDD API Swagger**: https://app.swaggerhub.com/apis/buildingSMART/Dictionaries/v1
 - **bSDD GraphQL**: https://api.bsdd.buildingsmart.org/graphql
+- **bSDD IFC 4.3 Dictionary**: https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3
 - **Neo4j Cypher**: https://neo4j.com/docs/cypher-manual/
 - **Azure OpenAI**: https://learn.microsoft.com/en-us/azure/ai-services/openai/
 

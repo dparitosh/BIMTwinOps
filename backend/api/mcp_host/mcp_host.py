@@ -471,10 +471,8 @@ async def get_mcp_host() -> MCPHost:
     if _mcp_host is None:
         _mcp_host = MCPHost(pool_size=10)
         
-        # Get credentials from environment
-        neo4j_password = os.getenv("NEO4J_PASSWORD", "")
-        neo4j_user = os.getenv("NEO4J_USER", "neo4j")
-        neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+        # Get credentials from centralized config
+        from ..config import cfg
         
         # Default configurations (will be loaded from env/config in production)
         configs = [
@@ -484,9 +482,9 @@ async def get_mcp_host() -> MCPHost:
                 command="python",
                 args=["-m", "api.mcp_servers.neo4j"],
                 env={
-                    "NEO4J_URI": neo4j_uri,
-                    "NEO4J_USER": neo4j_user,
-                    "NEO4J_PASSWORD": neo4j_password,
+                    "NEO4J_URI": cfg.NEO4J_URI,
+                    "NEO4J_USER": cfg.NEO4J_USER,
+                    "NEO4J_PASSWORD": cfg.NEO4J_PASSWORD,
                 }
             ),
             MCPServerConfig(
@@ -494,7 +492,12 @@ async def get_mcp_host() -> MCPHost:
                 type=MCPServerType.BASEX,
                 command="python",
                 args=["-m", "api.mcp_servers.basex"],
-                env={"BASEX_HOST": "localhost", "BASEX_PORT": "8984"}
+                env={
+                    "BASEX_HOST": cfg.BASEX_HOST,
+                    "BASEX_PORT": str(cfg.BASEX_PORT),
+                    "BASEX_USER": cfg.BASEX_USER,
+                    "BASEX_PASSWORD": cfg.BASEX_PASSWORD,
+                }
             ),
             MCPServerConfig(
                 name="bsdd",

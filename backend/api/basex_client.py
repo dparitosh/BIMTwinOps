@@ -30,23 +30,24 @@ class BaseXService:
         port: Optional[int] = None, 
         username: Optional[str] = None, 
         password: Optional[str] = None,
-        db_name: str = "bsdd_documents"
+        db_name: Optional[str] = None
     ):
         """
         Initialize BaseX Service
         
         Args:
-            host: BaseX server host (default: env BASEX_HOST or localhost)
-            port: BaseX server port (default: env BASEX_PORT or 1984)
-            username: BaseX username (default: env BASEX_USER or admin)
-            password: BaseX password (default: env BASEX_PASSWORD or admin)
-            db_name: Default database name to use
+            host: BaseX server host (from BASEX_HOST env var)
+            port: BaseX server port (from BASEX_PORT env var)
+            username: BaseX username (from BASEX_USER env var)
+            password: BaseX password (from BASEX_PASSWORD env var)
+            db_name: Default database name (from BASEX_DB_NAME env var)
         """
-        self.host = host or os.getenv("BASEX_HOST", "localhost")
-        self.port = port or int(os.getenv("BASEX_PORT", 1984))
-        self.username = username or os.getenv("BASEX_USER", "admin")
-        self.password = password or os.getenv("BASEX_PASSWORD", "admin")
-        self.db_name = db_name
+        from .config import cfg
+        self.host = host or cfg.BASEX_HOST
+        self.port = port or cfg.BASEX_PORT
+        self.username = username or cfg.BASEX_USER
+        self.password = password or cfg.BASEX_PASSWORD
+        self.db_name = db_name or cfg.BASEX_DB_NAME
         self.session = None
 
     def connect(self):

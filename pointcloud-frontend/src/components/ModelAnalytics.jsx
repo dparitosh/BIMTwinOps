@@ -30,9 +30,14 @@ export default function ModelAnalytics({
   const viewerRef = useRef(null);
   const [modelData, setModelData] = useState(null);
   const [categoryStats, setCategoryStats] = useState([]);
+  const [levelStats, setLevelStats] = useState([]);
+  const [materialStats, setMaterialStats] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [loading, setLoading] = useState(false);
   const [activeChart, setActiveChart] = useState("category"); // "category", "level", "material"
+
+  // Return whichever stats array matches the active tab
+  const activeStats = activeChart === 'level' ? levelStats : activeChart === 'material' ? materialStats : categoryStats;
 
   // Analyze model when loaded
   const handleModelLoaded = async (model) => {
@@ -57,34 +62,58 @@ export default function ModelAnalytics({
         }
       }, true);
 
-      // Collect category statistics
+      // Collect category, level, and material statistics
       const categories = {};
+      const levels = {};
+      const materials = {};
       let processed = 0;
+
+      const LEVEL_COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316','#eab308','#14b8a6','#6b7280'];
+      const MATERIAL_COLORS = ['#06b6d4','#8b5cf6','#f97316','#10b981','#ef4444','#3b82f6','#ec4899','#84cc16','#eab308','#f59e0b','#14b8a6','#6b7280'];
 
       const processNode = (dbId) => {
         return new Promise((resolve) => {
           viewer.getProperties(dbId, (props) => {
+            // --- Category ---
             const categoryProp = props.properties?.find(p => 
               p.displayName === "Category" || 
               p.attributeName === "Category" ||
               p.displayName === "Type"
             );
-            
             const category = categoryProp?.displayValue || "Other";
-            
             if (!categories[category]) {
-              categories[category] = {
-                name: category,
-                count: 0,
-                dbIds: [],
-                color: CATEGORY_COLORS[category] || CATEGORY_COLORS["Other"]
-              };
+              categories[category] = { name: category, count: 0, dbIds: [], color: CATEGORY_COLORS[category] || CATEGORY_COLORS["Other"] };
             }
-            
             categories[category].count++;
             categories[category].dbIds.push(dbId);
+
+            // --- Level ---
+            const levelProp = props.properties?.find(p =>
+              p.displayName === "Level" || p.attributeName === "Level" ||
+              p.displayName === "Reference Level" || p.displayName === "Base Constraint"
+            );
+            const level = levelProp?.displayValue || "Unassigned";
+            if (!levels[level]) {
+              const idx = Object.keys(levels).length;
+              levels[level] = { name: level, count: 0, dbIds: [], color: LEVEL_COLORS[idx % LEVEL_COLORS.length] };
+            }
+            levels[level].count++;
+            levels[level].dbIds.push(dbId);
+
+            // --- Material ---
+            const materialProp = props.properties?.find(p =>
+              p.displayName === "Material" || p.attributeName === "Material" ||
+              p.displayName === "Structural Material"
+            );
+            const material = materialProp?.displayValue || "Unspecified";
+            if (!materials[material]) {
+              const idx = Object.keys(materials).length;
+              materials[material] = { name: material, count: 0, dbIds: [], color: MATERIAL_COLORS[idx % MATERIAL_COLORS.length] };
+            }
+            materials[material].count++;
+            materials[material].dbIds.push(dbId);
+
             processed++;
-            
             resolve();
           }, (err) => {
             categories["Other"] = categories["Other"] || { name: "Other", count: 0, dbIds: [], color: CATEGORY_COLORS["Other"] };
@@ -105,11 +134,17 @@ export default function ModelAnalytics({
 
       // Sort by count
       const sortedCategories = Object.values(categories).sort((a, b) => b.count - a.count);
+      const sortedLevels = Object.values(levels).sort((a, b) => b.count - a.count);
+      const sortedMaterials = Object.values(materials).sort((a, b) => b.count - a.count);
       
       setCategoryStats(sortedCategories);
+      setLevelStats(sortedLevels);
+      setMaterialStats(sortedMaterials);
       setModelData({
         totalElements: dbIds.length,
         categories: sortedCategories.length,
+        levels: sortedLevels.length,
+        materials: sortedMaterials.length,
         processedAt: new Date().toISOString()
       });
     } catch (err) {
@@ -129,8 +164,9 @@ export default function ModelAnalytics({
       
       // Apply category color
       const rgb = hexToRgb(category.color);
-      if (rgb) {
-        const threeColor = new window.Autodesk.Viewing.THREE.Vector4(...rgb, 1);
+      const THREE = window.Autodesk?.Viewing?.THREE;
+      if (rgb && THREE) {
+        const threeColor = new THREE.Vector4(...rgb, 1);
         category.dbIds.forEach(dbId => {
           viewerRef.current.setThemingColor(dbId, threeColor);
         });
@@ -149,10 +185,11 @@ export default function ModelAnalytics({
 
   // Export to CSV
   const exportToCSV = () => {
-    if (!categoryStats.length) return;
+    if (!activeStats.length) return;
     
-    const headers = ["Category", "Element Count", "Percentage"];
-    const rows = categoryStats.map(cat => [
+    const chartLabel = activeChart === 'level' ? 'Level' : activeChart === 'material' ? 'Material' : 'Category';
+    const headers = [chartLabel, "Element Count", "Percentage"];
+    const rows = activeStats.map(cat => [
       cat.name,
       cat.count,
       ((cat.count / modelData.totalElements) * 100).toFixed(2) + "%"
@@ -170,7 +207,7 @@ export default function ModelAnalytics({
   };
 
   // Calculate max count for bar chart scaling
-  const maxCount = Math.max(...categoryStats.map(c => c.count), 1);
+  const maxCount = Math.max(...activeStats.map(c => c.count), 1);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 12 }}>
@@ -217,7 +254,7 @@ export default function ModelAnalytics({
         {/* Export Button */}
         <button
           onClick={exportToCSV}
-          disabled={!categoryStats.length}
+          disabled={!activeStats.length}
           style={{
             padding: '8px 16px',
             borderRadius: 8,
@@ -226,8 +263,8 @@ export default function ModelAnalytics({
             color: 'white',
             fontWeight: 500,
             fontSize: 13,
-            cursor: categoryStats.length ? 'pointer' : 'not-allowed',
-            opacity: categoryStats.length ? 1 : 0.5,
+            cursor: activeStats.length ? 'pointer' : 'not-allowed',
+            opacity: activeStats.length ? 1 : 0.5,
             display: 'flex',
             alignItems: 'center',
             gap: 8
@@ -307,7 +344,7 @@ export default function ModelAnalytics({
                   <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Analyzing model...</div>
                 </div>
               </div>
-            ) : categoryStats.length === 0 ? (
+            ) : activeStats.length === 0 ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
                 <div>
                   <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="var(--text-secondary)" strokeWidth="1.5" style={{ margin: '0 auto 12px', opacity: 0.5 }}>
@@ -318,7 +355,7 @@ export default function ModelAnalytics({
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {categoryStats.map((category, index) => (
+                {activeStats.map((category, index) => (
                   <div
                     key={category.name}
                     onClick={() => handleCategoryClick(category)}

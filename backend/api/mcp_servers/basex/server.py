@@ -62,7 +62,7 @@ class BaseXMCPServer:
         host: str = "localhost",
         port: int = 1984,
         username: str = "admin",
-        password: str = "admin"
+        password: str = ""
     ):
         """
         Initialize BaseX MCP Server
@@ -81,7 +81,7 @@ class BaseXMCPServer:
         self.server = Server("basex-mcp-server")
         
         # Database name for bSDD documents
-        self.db_name = "bsdd_documents"
+        self.db_name = os.getenv("BASEX_DB_NAME", "bsdd_documents")
         
         # Register tool handlers
         self._register_tools()
@@ -579,7 +579,7 @@ async def main():
     basex_host = os.getenv("BASEX_HOST", "localhost")
     basex_port = int(os.getenv("BASEX_PORT", "1984"))
     basex_user = os.getenv("BASEX_USER", "admin")
-    basex_password = os.getenv("BASEX_PASSWORD", "admin")
+    basex_password = os.getenv("BASEX_PASSWORD", "")
     
     # Create and run server
     server_instance = BaseXMCPServer(

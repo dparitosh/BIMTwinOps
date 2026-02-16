@@ -146,6 +146,26 @@ app.get('/aps/config', (_req, res) => {
   });
 });
 
+// Debug endpoint to show what OAuth URL would be generated
+app.get('/aps/oauth/debug', async (req, res) => {
+  const clientId = config.APS_CLIENT_ID;
+  const callbackUrl = config.APS_CALLBACK_URL;
+  const scopes = parseScopes(config.APS_OAUTH_SCOPES);
+  const state = 'DEBUG_STATE_12345';
+  
+  const { AuthenticationClient } = await import('@aps_sdk/authentication');
+  const client = new AuthenticationClient();
+  const url = client.authorize(clientId, ResponseType.Code, callbackUrl, scopes, { state });
+  
+  res.json({
+    clientId,
+    callbackUrl,
+    scopes,
+    scopesString: config.APS_OAUTH_SCOPES,
+    generatedUrl: url
+  });
+});
+
 // 2-legged token endpoint (safe to call from your frontend; secrets stay server-side)
 app.get('/aps/token', async (_req, res, next) => {
   try {

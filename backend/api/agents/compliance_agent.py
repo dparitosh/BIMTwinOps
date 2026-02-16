@@ -1,27 +1,12 @@
 import re
 
+
 class ComplianceAgent:
-        def suggest_fixes(self, entity: dict) -> dict:
-            """
-            Use GenAI (LLM) to suggest automated fixes for non-compliant IFC entity data.
-            This is a placeholder for LLM integration; in production, connect to an LLM service.
-            """
-            # Example: Suggest a valid URI if missing/invalid, or recommend adding missing associations
-            suggestions = []
-            if not entity.get("uri"):
-                suggestions.append("Add a valid bSDD URI for this entity.")
-            elif not self._is_valid_bsdd_uri(entity["uri"]):
-                suggestions.append("Correct the bSDD URI format to match the standard.")
-            for field in ["classification", "property", "material"]:
-                if field in entity and not entity[field]:
-                    suggestions.append(f"Add or correct the {field} association.")
-            if not suggestions:
-                suggestions.append("No issues detected. Entity is compliant.")
-            return {"entity": entity.get("name", "Unknown"), "suggestions": suggestions}
     """
     Agent for validating IFC models against bSDD standards.
     Checks classification, property, and material associations for compliance.
     """
+
     def __init__(self):
         pass
 
@@ -54,7 +39,7 @@ class ComplianceAgent:
             "entity": entity.get("name", "Unknown"),
             "errors": errors,
             "compliant": len(errors) == 0,
-            "report": report
+            "report": report,
         }
 
     def validate_entities(self, entities: list) -> dict:
@@ -66,7 +51,27 @@ class ComplianceAgent:
         return {
             "total": len(entities),
             "non_compliant": len(non_compliant),
-            "results": results
+            "results": results,
+        }
+
+    def suggest_fixes(self, entity: dict) -> dict:
+        """
+        Use GenAI (LLM) to suggest automated fixes for non-compliant IFC entity data.
+        This is a placeholder for LLM integration; in production, connect to an LLM service.
+        """
+        suggestions = []
+        if not entity.get("uri"):
+            suggestions.append("Add a valid bSDD URI for this entity.")
+        elif not self._is_valid_bsdd_uri(entity["uri"]):
+            suggestions.append("Correct the bSDD URI format to match the standard.")
+        for field in ["classification", "property", "material"]:
+            if field in entity and not entity[field]:
+                suggestions.append(f"Add or correct the {field} association.")
+        if not suggestions:
+            suggestions.append("No issues detected. Entity is compliant.")
+        return {
+            "entity": entity.get("name", "Unknown"),
+            "suggestions": suggestions,
         }
 
     def _is_valid_bsdd_uri(self, uri: str) -> bool:

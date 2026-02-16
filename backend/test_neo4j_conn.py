@@ -1,17 +1,21 @@
 """Quick Neo4j connection test"""
 import os
+from dotenv import load_dotenv
 
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
-NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+load_dotenv()
+
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
+NEO4J_USER = os.getenv("NEO4J_USER", "")
+NEO4J_URI = os.getenv("NEO4J_URI", "")
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "neo4j")
 
 from neo4j import GraphDatabase
 
 def test():
-    print(f"Testing direct Neo4j connection to {NEO4J_URI}...")
+    print(f"Testing direct Neo4j connection to {NEO4J_URI} (database={NEO4J_DATABASE})...")
     try:
         driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-        with driver.session() as session:
+        with driver.session(database=NEO4J_DATABASE) as session:
             result = session.run("MATCH (n) RETURN count(n) as total")
             record = result.single()
             print(f"Node count: {record['total']}")

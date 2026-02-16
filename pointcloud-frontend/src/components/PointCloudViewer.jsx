@@ -119,11 +119,12 @@ export default function PointCloudViewer({
     window.addEventListener("resize", onResize);
 
     // guard context menu
-    renderer.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
+    const preventContextMenu = (e) => e.preventDefault();
+    renderer.domElement.addEventListener("contextmenu", preventContextMenu);
 
     return () => {
       window.removeEventListener("resize", onResize);
-      renderer.domElement.removeEventListener("contextmenu", (e) => e.preventDefault());
+      renderer.domElement.removeEventListener("contextmenu", preventContextMenu);
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       controls.dispose();
       renderer.dispose();

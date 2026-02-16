@@ -3,9 +3,9 @@ bSDD Data Ingestion Pipeline
 Fetches data from buildingSMART Data Dictionary and populates Neo4j knowledge graph
 """
 import logging
-from typing import List, Optional, Dict
-from bsdd_client import BSDDClient, BSDDEnvironment
-from knowledge_graph_schema import KnowledgeGraphSchema
+from typing import List, Optional, Dict, Any
+from .bsdd_client import BSDDClient, BSDDEnvironment
+from .knowledge_graph_schema import KnowledgeGraphSchema
 import time
 from datetime import datetime
 
@@ -239,14 +239,28 @@ class BSDDIngestionPipeline:
         self,
         dictionary_uri: str,
         include_properties: bool = True,
-        max_classes: Optional[int] = None
+        max_classes: Optional[int] = None,
+        fetch_detailed_classes: bool = False
     ):
-        """Ingest all classes from a dictionary"""
+        """
+        Ingest all classes from a dictionary
+        
+        Args:
+            dictionary_uri: URI of the dictionary
+            include_properties: Include class properties
+            max_classes: Maximum number of classes to process (for testing)
+            fetch_detailed_classes: If False, uses basic class info from list API (faster)
+                                    If True, fetches detailed info for each class (slower but more complete)
+        """
         logger.info(f"Fetching classes for dictionary: {dictionary_uri}")
         
         try:
-            # Search for all classes (empty search returns all)
-            classes = self.bsdd.search_classes(dictionary_uri)
+            # Use get_dictionary_classes which supports pagination and is more efficient
+            classes = self.bsdd.get_dictionary_classes(
+                dictionary_uri,
+                include_properties=include_properties,
+                fetch_all=True  # Enable pagination to get all classes
+            )
             
             if max_classes:
                 classes = classes[:max_classes]
@@ -255,16 +269,21 @@ class BSDDIngestionPipeline:
             
             for i, bsdd_class in enumerate(classes):
                 try:
-                    if (i + 1) % 10 == 0:
+                    if (i + 1) % 100 == 0:
                         logger.info(f"  Processing class {i+1}/{len(classes)}...")
                     
-                    # Get full class details
-                    detailed_class = self.bsdd.get_class_details(
-                        dictionary_uri,
-                        bsdd_class.uri,
-                        include_properties=include_properties,
-                        include_relations=True
-                    )
+                    # If fetch_detailed_classes is True, get full details for each class
+                    # Otherwise, use the class data we already have
+                    if fetch_detailed_classes:
+                        detailed_class = self.bsdd.get_class_details(
+                            dictionary_uri,
+                            bsdd_class.uri,
+                            include_properties=include_properties,
+                            include_relations=True
+                        )
+                    else:
+                        # Use the class data we already fetched (much faster)
+                        detailed_class = bsdd_class
                     
                     # Validation
                     validation_errors = self._validate_class(detailed_class)
@@ -294,15 +313,15 @@ class BSDDIngestionPipeline:
                             detailed_class.properties
                         )
                     
-                    # Ingest relationships
-                    if detailed_class.relations:
+                    # Ingest relationships (only if we fetched detailed classes)
+                    if hasattr(detailed_class, 'relations') and detailed_class.relations:
                         self._ingest_class_relationships(
                             detailed_class.uri,
                             detailed_class.relations
                         )
                     
                     # Link parent class if exists
-                    if detailed_class.parent_class_uri:
+                    if hasattr(detailed_class, 'parent_class_uri') and detailed_class.parent_class_uri:
                         try:
                             self.kg.create_class_relationship(
                                 detailed_class.uri,
@@ -313,8 +332,9 @@ class BSDDIngestionPipeline:
                         except Exception as e:
                             logger.warning(f"Failed to link parent class: {e}")
                     
-                    # Rate limiting
-                    time.sleep(0.3)
+                    # Rate limiting - only if fetching detailed classes
+                    if fetch_detailed_classes:
+                        time.sleep(0.3)
                     
                 except Exception as e:
                     error_msg = f"Failed to process class {bsdd_class.uri}: {e}"
@@ -568,9 +588,10 @@ if __name__ == "__main__":
         raise ValueError("NEO4J_PASSWORD environment variable is required")
     
     kg_schema = KnowledgeGraphSchema(
-        neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-        neo4j_user=os.getenv("NEO4J_USER", "neo4j"),
-        neo4j_password=neo4j_password
+        neo4j_uri=os.getenv("NEO4J_URI", ""),
+        neo4j_user=os.getenv("NEO4J_USER", ""),
+        neo4j_password=neo4j_password,
+        database=os.getenv("NEO4J_DATABASE")
     )
     
     try:

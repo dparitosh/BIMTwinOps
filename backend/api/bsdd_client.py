@@ -87,7 +87,8 @@ class BSDDClient:
     def __init__(
         self, 
         environment: BSDDEnvironment = BSDDEnvironment.PRODUCTION,
-        auth_token: Optional[str] = None
+        auth_token: Optional[str] = None,
+        user_agent: str = "BIMTwinOps/2.0.0"
     ):
         """
         Initialize bSDD client
@@ -95,12 +96,20 @@ class BSDDClient:
         Args:
             environment: Production or test environment
             auth_token: Optional OAuth2 token for secured endpoints
+            user_agent: User-Agent header for API requests
         """
         self.base_url = environment.value
-        self.graphql_url = f"{self.base_url}/graphql"
+        self.graphql_url = f"{self.base_url}/graphqls"  # Secured GraphQL endpoint
         self.auth_token = auth_token or os.getenv("BSDD_AUTH_TOKEN")
         self.session = requests.Session()
         
+        # Add User-Agent header (required for REST APIs)
+        self.session.headers.update({
+            "User-Agent": user_agent,
+            "Accept": "application/json"
+        })
+        
+        # Add Authorization header if token provided
         if self.auth_token:
             self.session.headers.update({
                 "Authorization": f"Bearer {self.auth_token}"
@@ -142,46 +151,206 @@ class BSDDClient:
             raise
     
     @lru_cache(maxsize=100)
-    def get_dictionaries(self) -> List[BSDDDictionary]:
+    def get_dictionaries(
+        self,
+        include_test: bool = False,
+        organization_code: Optional[str] = None,
+        status: Optional[str] = None
+    ) -> List[BSDDDictionary]:
         """
-        Get list of available dictionaries in bSDD
+        Get list of available dictionaries in bSDD using REST API
+        
+        Args:
+            include_test: Include test dictionaries
+            organization_code: Filter by organization code
+            status: Filter by status (Active, Preview, Inactive)
         
         Returns:
             List of BSDDDictionary objects
         """
-        query = """
-        {
-          dictionaries {
-            uri
-            name
-            version
-            organizationCodeOwner
-            status
-            languageCode
-            license
-            releaseDate
-            moreInfoUrl
-          }
-        }
+        endpoint = "/api/Dictionary/v1"
+        params = {}
+        
+        if include_test:
+            params["IncludeTestDictionaries"] = "true"
+        if organization_code:
+            params["OrganizationCode"] = organization_code
+        if status:
+            params["Status"] = status
+        
+        try:
+            result = self._get(endpoint, params)
+            dictionaries = result.get("dictionaries", [])
+            
+            return [
+                BSDDDictionary(
+                    uri=d.get("uri", ""),
+                    name=d.get("name", ""),
+                    version=d.get("version", ""),
+                    organization_code=d.get("organizationCodeOwner", ""),
+                    status=d.get("status", ""),
+                    language_code=d.get("defaultLanguageCode", "en-GB"),
+                    license=d.get("license"),
+                    release_date=d.get("releaseDate"),
+                    more_info_url=d.get("moreInfoUrl")
+                )
+                for d in dictionaries
+            ]
+        except Exception as e:
+            logger.error(f"Failed to get dictionaries: {e}")
+            return []
+    
+    def get_dictionary_classes(
+        self,
+        dictionary_uri: str,
+        language_code: str = "en-GB",
+        class_type: Optional[str] = None,
+        related_ifc_entity: Optional[str] = None,
+        include_properties: bool = True,
+        fetch_all: bool = True
+    ) -> List[BSDDClass]:
         """
+        Get all classes from a dictionary using REST API with pagination support
         
-        result = self._graphql_query(query)
-        dictionaries = result.get("dictionaries", [])
+        Args:
+            dictionary_uri: URI of the dictionary
+            language_code: Language code for results
+            class_type: Filter by class type
+            related_ifc_entity: Filter by IFC entity
+            include_properties: Include class properties
+            fetch_all: Fetch all results using pagination (may take time for large dictionaries)
+            
+        Returns:
+            List of BSDDClass objects
+        """
+        endpoint = "/api/Dictionary/v1/Classes"
+        all_classes = []
+        offset = 0
+        limit = 1000  # Max allowed by API
         
-        return [
-            BSDDDictionary(
-                uri=d["uri"],
-                name=d["name"],
-                version=d["version"],
-                organization_code=d.get("organizationCodeOwner", ""),
-                status=d["status"],
-                language_code=d["languageCode"],
-                license=d.get("license"),
-                release_date=d.get("releaseDate"),
-                more_info_url=d.get("moreInfoUrl")
-            )
-            for d in dictionaries
-        ]
+        while True:
+            params = {
+                "Uri": dictionary_uri,
+                "LanguageCode": language_code,
+                "Offset": offset,
+                "Limit": limit
+            }
+            
+            if class_type:
+                params["ClassType"] = class_type
+            if related_ifc_entity:
+                params["RelatedIfcEntities"] = related_ifc_entity
+            
+            try:
+                result = self._get(endpoint, params)
+                classes = result.get("classes", [])
+                
+                if not classes:
+                    break
+                
+                all_classes.extend([
+                    BSDDClass(
+                        uri=c.get("uri", ""),
+                        code=c.get("code", ""),
+                        name=c.get("name", ""),
+                        definition=c.get("definition"),
+                        class_type=c.get("classType"),
+                        related_ifc_entities=c.get("relatedIfcEntityNames", []),
+                        synonyms=c.get("synonyms", []),
+                        properties=c.get("classProperties", []) if include_properties else []
+                    )
+                    for c in classes
+                ])
+                
+                logger.info(f"Fetched {len(all_classes)} classes so far from {dictionary_uri}")
+                
+                # If we got less than limit, we've reached the end
+                if len(classes) < limit or not fetch_all:
+                    break
+                
+                offset += limit
+                
+            except Exception as e:
+                logger.error(f"Failed to get classes for dictionary {dictionary_uri} at offset {offset}: {e}")
+                if all_classes:
+                    logger.warning(f"Returning {len(all_classes)} classes fetched before error")
+                    break
+                else:
+                    return []
+        
+        logger.info(f"Total classes fetched: {len(all_classes)}")
+        return all_classes
+    
+    def get_dictionary_properties(
+        self,
+        dictionary_uri: str,
+        language_code: str = "en-GB",
+        fetch_all: bool = True
+    ) -> List[BSDDProperty]:
+        """
+        Get all properties from a dictionary using REST API with pagination support
+        
+        Args:
+            dictionary_uri: URI of the dictionary
+            language_code: Language code for results
+            fetch_all: Fetch all results using pagination
+            
+        Returns:
+            List of BSDDProperty objects
+        """
+        endpoint = "/api/Dictionary/v1/Properties"
+        all_properties = []
+        offset = 0
+        limit = 1000  # Max allowed by API
+        
+        while True:
+            params = {
+                "Uri": dictionary_uri,
+                "LanguageCode": language_code,
+                "Offset": offset,
+                "Limit": limit
+            }
+            
+            try:
+                result = self._get(endpoint, params)
+                properties = result.get("properties", [])
+                
+                if not properties:
+                    break
+                
+                all_properties.extend([
+                    BSDDProperty(
+                        uri=p.get("uri", ""),
+                        code=p.get("code", ""),
+                        name=p.get("name", ""),
+                        definition=p.get("definition"),
+                        data_type=p.get("dataType"),
+                        units=p.get("units", []),
+                        allowed_values=p.get("allowedValues", []),
+                        physical_quantity=p.get("physicalQuantity"),
+                        dimension=p.get("dimension")
+                    )
+                    for p in properties
+                ])
+                
+                logger.info(f"Fetched {len(all_properties)} properties so far from {dictionary_uri}")
+                
+                # If we got less than limit, we've reached the end
+                if len(properties) < limit or not fetch_all:
+                    break
+                
+                offset += limit
+                
+            except Exception as e:
+                logger.error(f"Failed to get properties for dictionary {dictionary_uri} at offset {offset}: {e}")
+                if all_properties:
+                    logger.warning(f"Returning {len(all_properties)} properties fetched before error")
+                    break
+                else:
+                    return []
+        
+        logger.info(f"Total properties fetched: {len(all_properties)}")
+        return all_properties
     
     def search_classes(
         self,
@@ -191,7 +360,7 @@ class BSDDClient:
         language_code: str = "en-GB"
     ) -> List[BSDDClass]:
         """
-        Search for classes in a dictionary
+        Search for classes in a dictionary using REST API
         
         Args:
             dictionary_uri: URI of the dictionary to search in
@@ -202,50 +371,36 @@ class BSDDClient:
         Returns:
             List of BSDDClass objects
         """
-        query = """
-        query ($dictionaryUri: String!, $searchText: String, $languageCode: String) {
-          dictionary(uri: $dictionaryUri) {
-            classSearch(searchText: $searchText, languageCode: $languageCode) {
-              uri
-              code
-              name
-              definition
-              classType
-              synonyms
-              relatedIfcEntityNames
-            }
-          }
-        }
-        """
-        
-        variables = {
-            "dictionaryUri": dictionary_uri,
-            "searchText": search_text,
-            "languageCode": language_code
+        endpoint = "/api/Dictionary/v1/Classes"
+        params = {
+            "Uri": dictionary_uri,
+            "LanguageCode": language_code
         }
         
-        result = self._graphql_query(query, variables)
-        classes = result.get("dictionary", {}).get("classSearch", [])
-        
-        # Filter by IFC entity if specified
+        if search_text:
+            params["SearchText"] = search_text
         if related_ifc_entity:
-            classes = [
-                c for c in classes
-                if related_ifc_entity in c.get("relatedIfcEntityNames", [])
-            ]
+            params["RelatedIfcEntities"] = related_ifc_entity
         
-        return [
-            BSDDClass(
-                uri=c["uri"],
-                code=c["code"],
-                name=c["name"],
-                definition=c.get("definition"),
-                class_type=c.get("classType"),
-                related_ifc_entities=c.get("relatedIfcEntityNames", []),
-                synonyms=c.get("synonyms", [])
-            )
-            for c in classes
-        ]
+        try:
+            result = self._get(endpoint, params)
+            classes = result.get("classes", [])
+            
+            return [
+                BSDDClass(
+                    uri=c.get("uri", ""),
+                    code=c.get("code", ""),
+                    name=c.get("name", ""),
+                    definition=c.get("definition"),
+                    class_type=c.get("classType"),
+                    related_ifc_entities=c.get("relatedIfcEntityNames", []),
+                    synonyms=c.get("synonyms", [])
+                )
+                for c in classes
+            ]
+        except Exception as e:
+            logger.error(f"Failed to search classes in {dictionary_uri}: {e}")
+            return []
     
     def get_class_details(
         self,
@@ -253,10 +408,11 @@ class BSDDClient:
         class_uri: str,
         include_properties: bool = True,
         include_relations: bool = True,
-        include_children: bool = False
+        include_children: bool = False,
+        language_code: str = "en-GB"
     ) -> BSDDClass:
         """
-        Get detailed information about a class including properties and relations
+        Get detailed information about a class using REST API
         
         Args:
             dictionary_uri: URI of the dictionary
@@ -264,84 +420,44 @@ class BSDDClient:
             include_properties: Include class properties
             include_relations: Include class relations
             include_children: Include child classes
+            language_code: Language code for results
             
         Returns:
             BSDDClass object with full details
         """
-        query = """
-        query ($dictionaryUri: String!, $classUri: String!, $includeChildren: Boolean!) {
-          dictionary(uri: $dictionaryUri) {
-            class(uri: $classUri, includeChildren: $includeChildren) {
-              uri
-              code
-              name
-              definition
-              classType
-              synonyms
-              relatedIfcEntityNames
-              parentClassReference {
-                uri
-                name
-              }
-              properties {
-                code
-                name
-                uri
-                description
-                definition
-                dataType
-                isRequired
-                pattern
-                dimension
-                physicalQuantity
-                allowedValues {
-                  code
-                  value
-                }
-                units
-              }
-              relations {
-                relatedClassName
-                relatedClassUri
-                relationType
-              }
-              childs {
-                uri
-                name
-                code
-              }
-            }
-          }
-        }
-        """
-        
-        variables = {
-            "dictionaryUri": dictionary_uri,
-            "classUri": class_uri,
-            "includeChildren": include_children
+        endpoint = "/api/Class/v1"
+        params = {
+            "Uri": class_uri,
+            "LanguageCode": language_code,
+            "IncludeClassProperties": str(include_properties).lower(),
+            "IncludeClassRelations": str(include_relations).lower(),
+            "IncludeChilds": str(include_children).lower()
         }
         
-        result = self._graphql_query(query, variables)
-        class_data = result.get("dictionary", {}).get("class", {})
-        
-        if not class_data:
-            raise ValueError(f"Class not found: {class_uri}")
-        
-        parent_ref = class_data.get("parentClassReference")
-        parent_uri = parent_ref.get("uri") if parent_ref else None
-        
-        return BSDDClass(
-            uri=class_data["uri"],
-            code=class_data["code"],
-            name=class_data["name"],
-            definition=class_data.get("definition"),
-            class_type=class_data.get("classType"),
-            related_ifc_entities=class_data.get("relatedIfcEntityNames", []),
-            synonyms=class_data.get("synonyms", []),
-            properties=class_data.get("properties", []) if include_properties else [],
-            relations=class_data.get("relations", []) if include_relations else [],
-            parent_class_uri=parent_uri
-        )
+        try:
+            result = self._get(endpoint, params)
+            
+            if not result:
+                raise ValueError(f"Class not found: {class_uri}")
+            
+            parent_ref = result.get("parentClassReference")
+            parent_uri = parent_ref.get("uri") if parent_ref else None
+            
+            return BSDDClass(
+                uri=result.get("uri", ""),
+                code=result.get("code", ""),
+                name=result.get("name", ""),
+                definition=result.get("definition"),
+                class_type=result.get("classType"),
+                related_ifc_entities=result.get("relatedIfcEntityNames", []),
+                synonyms=result.get("synonyms", []),
+                properties=result.get("classProperties", []) if include_properties else [],
+                relations=result.get("classRelations", []) if include_relations else [],
+                parent_class_uri=parent_uri
+            )
+        except Exception as e:
+            logger.error(f"Failed to get class details for {class_uri}: {e}")
+            raise
     
     def get_properties_for_class(
         self,
