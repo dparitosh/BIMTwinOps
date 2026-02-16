@@ -12,6 +12,7 @@ import AgentInterface from "./components/AgentInterface";
 // Enterprise Pages
 import ProjectScheduling from "./components/ProjectScheduling";
 import ModelAnalytics from "./components/ModelAnalytics";
+import RevitIntegration from "./components/RevitIntegration";
 import { enrichBatch, checkPointCloudHealth } from "./api";
 import "./ChatStyles.css";
 
@@ -72,6 +73,7 @@ import OpenApiTab from "./components/OpenApiTab";
 const VIEWER_TABS = [
   { id: "agent", label: "AI Assistant", icon: "M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" },
   { id: "bim", label: "BIM Viewer", icon: "M2 20h20M4 20V8l4-4v6l4-4v6l4-4v8M8 20v-4h4v4M18 20V10h3v10" },
+  { id: "revit", label: "Revit Integration", icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" },
   { id: "scheduling", label: "Scheduling", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
   { id: "analytics", label: "Analytics", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
   { id: "pointcloud", label: "PointCloud", icon: "M12 12m-3 0a3 3 0 106 0 3 3 0 10-6 0M6 6m-2 0a2 2 0 104 0 2 2 0 10-4 0M18 6m-2 0a2 2 0 104 0 2 2 0 10-4 0M6 18m-2 0a2 2 0 104 0 2 2 0 10-4 0M18 18m-2 0a2 2 0 104 0 2 2 0 10-4 0" },
@@ -286,6 +288,7 @@ export default function App() {
             onUrnReady={handleUrnReady}
           />
         )}
+        {activeTab === "revit" && <RevitIntegration />}
         {activeTab === "scheduling" && (
           <ProjectScheduling
             apsBaseUrl={APS_API_URL}

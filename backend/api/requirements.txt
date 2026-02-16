@@ -10,6 +10,9 @@ pandas>=2.0.0
 openpyxl>=3.1.0
 python-multipart>=0.0.12
 
+# IFC file processing and BIM integration
+ifcopenshell>=0.7.0
+
 # Neo4j driver for knowledge graph
 neo4j>=5.25.0
 

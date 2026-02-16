@@ -145,6 +145,15 @@ try:
 except Exception as e:
     logger.error(f"Point Cloud Semantic API not available: {e}", exc_info=True)
 
+# Import and include Revit bSDD Plugin Integration routes
+try:
+    logger.info("Attempting to import revit_integration_api module...")
+    from .revit_integration_api import router as revit_integration_router
+    app.include_router(revit_integration_router)
+    logger.info("Revit Integration API enabled at /api/revit-integration")
+except Exception as e:
+    logger.error(f"Revit Integration API not available: {e}", exc_info=True)
+
 
 @app.get("/health/neo4j")
 def health_neo4j():
