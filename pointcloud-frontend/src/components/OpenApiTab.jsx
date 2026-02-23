@@ -12,7 +12,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import ApiResponseViewer from "./ApiResponseViewer";
 
 const API_URL = import.meta.env.VITE_BACKEND_API_URL || "http://127.0.0.1:8008";
-const APS_URL = import.meta.env.VITE_APS_API_URL || "http://127.0.0.1:3001";
+const APS_URL = import.meta.env.VITE_APS_API_URL || (import.meta.env.DEV ? "" : "http://127.0.0.1:3001");
 const OLLAMA_URL = import.meta.env.VITE_OLLAMA_URL || "http://localhost:11434";
 const NEO4J_URI = import.meta.env.VITE_NEO4J_URI || "bolt://localhost:7687";
 

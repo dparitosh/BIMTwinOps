@@ -1,10 +1,10 @@
 import axios from "axios";
 
 // All API URLs from environment variables - no hardcoding
-const API_URL = import.meta.env.VITE_BACKEND_API_URL || "http://127.0.0.1:8008";
+const API_URL = import.meta.env.VITE_BACKEND_API_URL || (import.meta.env.DEV ? "" : "http://127.0.0.1:8008");
 const APS_API_URL =
   import.meta.env.VITE_APS_API_URL
-  || (String(window.location.port) === "3001" ? window.location.origin : "http://127.0.0.1:3001");
+  || (import.meta.env.DEV ? "" : "http://127.0.0.1:3001");
 
 export async function uploadPointCloud(file) {
   const formData = new FormData();
