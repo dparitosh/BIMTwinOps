@@ -115,7 +115,27 @@ if (-not $SkipChecks) {
         if ($tcpTest.TcpTestSucceeded) {
           Write-Host "[OK] Neo4j: Connected ($neo4jHost`:$neo4jPort)" -ForegroundColor Green
         } else {
-          Write-Host "[X] Neo4j: Connection FAILED" -ForegroundColor Red
+          Write-Host "[X] Neo4j: Not reachable — attempting auto-start..." -ForegroundColor Yellow
+          $neo4jSvc = Get-Service -Name "Neo4j*" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($neo4jSvc) {
+            if ($neo4jSvc.Status -ne 'Running') {
+              try { Start-Service -Name $neo4jSvc.Name -ErrorAction Stop; Start-Sleep -Seconds 5; Write-Host "[OK] Neo4j service started" -ForegroundColor Green }
+              catch { Write-Host "[!] Could not start Neo4j service: $_" -ForegroundColor Yellow }
+            }
+          } else {
+            $neo4jPaths = @(
+              "$env:ProgramFiles\Neo4j Desktop\Neo4j Desktop.exe",
+              "$env:LOCALAPPDATA\Programs\neo4j-desktop\Neo4j Desktop.exe",
+              "$env:ProgramFiles\Neo4j\bin\neo4j.bat"
+            )
+            $found = $false
+            foreach ($p in $neo4jPaths) {
+              if (Test-Path $p) { Start-Process $p; Start-Sleep -Seconds 8; $found = $true; break }
+            }
+            if (-not $found) {
+              Write-Host "[!] Neo4j not found. Start Neo4j Desktop manually." -ForegroundColor Red
+            }
+          }
         }
       }
     } catch {

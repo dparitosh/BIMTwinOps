@@ -125,8 +125,43 @@ if (-not $SkipChecks) {
         if ($tcpTest.TcpTestSucceeded) {
           Write-Host "[OK] Neo4j: Connected (${neo4jHost}:${neo4jPort})" -ForegroundColor Green
         } else {
-          Write-Host "[X] Neo4j: Connection FAILED - Is Neo4j running?" -ForegroundColor Red
-          Write-Host "    Start Neo4j Desktop or run: neo4j console" -ForegroundColor Yellow
+          Write-Host "[X] Neo4j: Not reachable — attempting auto-start..." -ForegroundColor Yellow
+
+          # Try Windows service first
+          $neo4jSvc = Get-Service -Name "Neo4j*" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($neo4jSvc) {
+            Write-Host "    Found service: $($neo4jSvc.Name) [$($neo4jSvc.Status)]" -ForegroundColor White
+            if ($neo4jSvc.Status -ne 'Running') {
+              try {
+                Start-Service -Name $neo4jSvc.Name -ErrorAction Stop
+                Start-Sleep -Seconds 5
+                Write-Host "[OK] Neo4j service started" -ForegroundColor Green
+              } catch {
+                Write-Host "[!] Could not start Neo4j service: $_" -ForegroundColor Yellow
+              }
+            }
+          } else {
+            # Try Neo4j Desktop / common install paths
+            $neo4jPaths = @(
+              "$env:ProgramFiles\Neo4j Desktop\Neo4j Desktop.exe",
+              "$env:LOCALAPPDATA\Programs\neo4j-desktop\Neo4j Desktop.exe",
+              "$env:ProgramFiles\Neo4j\bin\neo4j.bat"
+            )
+            $found = $false
+            foreach ($p in $neo4jPaths) {
+              if (Test-Path $p) {
+                Write-Host "    Starting Neo4j Desktop: $p" -ForegroundColor White
+                Start-Process $p
+                Start-Sleep -Seconds 8
+                $found = $true
+                break
+              }
+            }
+            if (-not $found) {
+              Write-Host "[!] Neo4j not found. Start Neo4j Desktop manually or run: neo4j console" -ForegroundColor Red
+              Write-Host "    Knowledge Graph features will be unavailable until Neo4j is running." -ForegroundColor Gray
+            }
+          }
         }
       }
     } catch {
