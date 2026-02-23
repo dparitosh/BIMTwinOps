@@ -17,6 +17,11 @@ export default defineConfig(({ mode }) => {
 			port: frontendPort,
 			strictPort: true,
 			proxy: {
+				// Proxy /health to backend
+				'/health': {
+					target: backendUrl,
+					changeOrigin: true
+				},
 				// Proxy /api requests to backend (FastAPI)
 				'/api': {
 					target: backendUrl,
