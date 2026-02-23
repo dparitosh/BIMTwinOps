@@ -298,8 +298,8 @@ docker run -d -p 9200:9200 -p 9600:9600 \
 
 ### 2. Start Backend
 ```bash
-cd backend/api
-uvicorn main:app --reload --port 8000
+cd backend
+python -m uvicorn api.main:app --reload --port 8008
 ```
 
 ### 3. Start Frontend

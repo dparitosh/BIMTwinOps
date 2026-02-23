@@ -121,7 +121,7 @@ with kg.driver.session(database=cfg.NEO4J_DATABASE) as session:
 # 6. Test API if available
 print("\n6. Testing Point Cloud Semantic API...")
 try:
-    response = requests.get("http://127.0.0.1:8000/api/pointcloud/health", timeout=3)
+    response = requests.get("http://127.0.0.1:8008/api/pointcloud/health", timeout=3)
     if response.status_code == 200:
         health = response.json()
         print(f"   ✓ API Status: {health.get('status', 'unknown')}")

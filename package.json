@@ -1,7 +1,10 @@
 {
-  "dependencies": {
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "swagger-ui-react": "^5.31.0"
+  "private": true,
+  "name": "bimtwinops",
+  "description": "BIMTwinOps workspace root – run scripts from individual packages",
+  "scripts": {
+    "bootstrap": "powershell -File bootstrap.ps1",
+    "start": "powershell -File start-all.ps1",
+    "stop": "powershell -File stop-all.ps1"
   }
 }

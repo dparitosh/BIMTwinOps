@@ -62,11 +62,20 @@ async function fetchViewerToken({ apsBaseUrl, auth }) {
     ? `${apsBaseUrl}/aps/oauth/token`
     : `${apsBaseUrl}/aps/token`;
 
-  const res = await fetch(url);
+  const opts = auth === "user" ? { credentials: "include" } : {};
+  const res = await fetch(url, opts);
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`Token fetch failed (${res.status}): ${text}`);
+  }
   const json = await res.json();
+  const accessToken = json.access_token || json.authorization?.replace(/^Bearer\s+/i, "");
+  if (!accessToken) {
+    throw new Error("No access_token in token response");
+  }
 
   return {
-    accessToken: json.access_token,
+    accessToken,
     expiresIn: json.expires_in || 300
   };
 }
@@ -177,11 +186,18 @@ const ApsViewerExtended = forwardRef(function ApsViewerExtended(
         viewerRef.current.resize();
         viewerRef.current.fitToView();
 
+        // BUGFIX: Load extensions with error handling - don't fail entire model if one extension fails
         for (const extId of enabledExtensions) {
           const ext = AVAILABLE_EXTENSIONS.find(e => e.id === extId);
           if (ext) {
-            await loadExtensionFiles(ext);
-            await viewerRef.current.loadExtension(extId);
+            try {
+              await loadExtensionFiles(ext);
+              await viewerRef.current.loadExtension(extId);
+              console.log(`[Viewer] Extension loaded: ${extId}`);
+            } catch (err) {
+              console.error(`[Viewer] Failed to load extension ${extId}:`, err);
+              // Continue loading other extensions instead of breaking
+            }
           }
         }
 

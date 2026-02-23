@@ -39,4 +39,7 @@ opensearch-py>=2.4.0                # OpenSearch for hybrid semantic search
 redis>=5.0.0                        # Redis for LangGraph state persistence
 BaseXClient>=8.4.4                  # BaseX Python Client
 
-# Note: PyTorch and PointNet dependencies are in pointnet_s3dis/requirements.txt
+# PyTorch for PointNet point cloud segmentation (CPU version)
+torch>=2.0.0                        # PyTorch deep learning framework
+torchvision>=0.15.0                 # PyTorch vision utilities
+torchaudio>=2.0.0                   # PyTorch audio (required by torch installation)

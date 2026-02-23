@@ -79,7 +79,7 @@ BIMTwinOps is a comprehensive digital twin platform that integrates:
 | Service | Port | Protocol | Purpose |
 |---------|------|----------|---------|
 | Frontend | 5173 | HTTP | React + Vite dev server |
-| Backend API | 8000 | HTTP | FastAPI REST/GraphQL |
+| Backend API | 8008 | HTTP | FastAPI REST/GraphQL |
 | APS Service | 3001 | HTTP | Autodesk OAuth proxy |
 | Neo4j | 7687 | Bolt | Knowledge graph DB |
 | Neo4j Browser | 7474 | HTTP | Neo4j web UI |
@@ -118,10 +118,9 @@ BIMTwinOps/
 │   ├── BSDD_INTEGRATION.md         # bSDD integration guide
 │   └── MODULE_INTEGRATION.md        # Architecture docs
 └── scripts/
-    ├── setup.ps1                    # Install dependencies (run once)
-    ├── deploy.ps1                   # Start services with validation
-    ├── stop-services.ps1            # Stop all services
-    └── configure.ps1                # Interactive port/credential config
+    ├── bootstrap.ps1                # Install dependencies (run once)
+    ├── start-services.ps1           # Start all services
+    └── stop-services.ps1            # Stop all services
 
 ```
 
@@ -142,11 +141,11 @@ BIMTwinOps/
 git clone https://github.com/dparitosh/BIMTwinOps.git
 cd BIMTwinOps
 
-# 2. Run setup (shows all output, validates everything)
-.\scripts\setup.ps1
+# 2. Run bootstrap (installs dependencies)
+.\scripts\bootstrap.ps1
 
-# 3. Deploy services (starts all, validates endpoints, opens browser)
-.\scripts\deploy.ps1
+# 3. Start services (starts all services)
+.\scripts\start-services.ps1
 ```
 
 That's it! The scripts show every step and confirm endpoints are working.
@@ -155,23 +154,19 @@ That's it! The scripts show every step and confirm endpoints are working.
 
 | Script | Purpose |
 |--------|---------|
-| `setup.ps1` | One-time install: venv, pip, npm, .env files |
-| `deploy.ps1` | Start services + validate endpoints |
-| `stop-services.ps1 -All -Force` | Stop all running services |
-| `configure.ps1` | Interactive wizard to change ports/credentials |
-
-### Troubleshooting
-
+| `bootstrap.ps1` | One-time install: venv, pip, npm |
+| `start-services.ps1` | Start all services (Backend, Frontend, APS) |
+| `stop-services.ps1` | Stop all running services |
 ```powershell
-# View backend errors
-Get-Content .\.pids\api.err.log -Tail 50
+# Check service status
+Get-NetTCPConnection -LocalPort 8008,5173,3001 -State Listen
 
-# Check what's running on a port
-Get-NetTCPConnection -LocalPort 8000 -State Listen
+# Test backend health
+curl http://localhost:8008/health
 
-# Reconfigure ports if conflicts
-.\scripts\configure.ps1
-.\scripts\deploy.ps1
+# Restart services
+.\scripts\stop-services.ps1
+.\scripts\start-services.ps1
 ```
 
 ### Manual Setup (alternative)
@@ -186,7 +181,7 @@ python -m venv ..\.venv
 pip install -r api\requirements.txt
 copy .env.example .env
 # Edit .env with Neo4j credentials
-python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8008
 
 # Frontend (new terminal)
 cd pointcloud-frontend
@@ -209,14 +204,14 @@ npm run dev
 
 ## 🔗 Service URLs
 
-After running `.\scripts\deploy.ps1`:
+After running `.\scripts\start-services.ps1`:
 
 | Service | URL |
 |---------|-----|
 | **Frontend** | http://localhost:5173 |
-| **Backend API** | http://localhost:8000 |
-| **API Docs (Swagger)** | http://localhost:8000/docs |
-| **GraphQL Playground** | http://localhost:8000/api/graphql |
+| **Backend API** | http://localhost:8008 |
+| **API Docs (Swagger)** | http://localhost:8008/docs |
+| **GraphQL Playground** | http://localhost:8008/api/graphql |
 | **APS Service** | http://localhost:3001 |
 
 ## 📚 Core Modules

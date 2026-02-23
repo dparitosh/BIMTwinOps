@@ -63,7 +63,7 @@ Write-Host ""
 Write-Host "--- Configuration ---" -ForegroundColor Cyan
 
 $bindHost = "127.0.0.1"
-$port = 8000
+$port = 8008
 $neo4jUri = ""
 $neo4jUser = ""
 $ollamaUrl = ""

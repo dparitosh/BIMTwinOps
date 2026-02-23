@@ -84,7 +84,7 @@ $backendEnv = [IO.Path]::Combine($root, 'backend', '.env')
 $frontendEnv = [IO.Path]::Combine($root, 'pointcloud-frontend', '.env')
 
 $backendHost = "127.0.0.1"
-$backendPort = "8000"
+$backendPort = "8008"
 $frontendPort = if ($env:FRONTEND_PORT) { $env:FRONTEND_PORT } else { "5173" }
 $apsPort = "3001"
 $neo4jUri = ""

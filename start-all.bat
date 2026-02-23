@@ -3,13 +3,13 @@ REM BIMTwinOps - Start All Services
 REM Usage: start-all.bat
 REM
 REM Port configuration (read from .env or use defaults):
-REM   BACKEND_PORT (default: 8000)
+REM   BACKEND_PORT (default: 8008)
 REM   FRONTEND_PORT (default: 5173)
 
 setlocal enabledelayedexpansion
 
 REM Default ports
-set BACKEND_PORT=8000
+set BACKEND_PORT=8008
 set FRONTEND_PORT=5173
 
 REM Try to read BACKEND_PORT from backend\.env

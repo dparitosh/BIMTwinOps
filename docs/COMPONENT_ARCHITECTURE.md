@@ -578,10 +578,12 @@ Windows 10/11
 │
 ├── Frontend: npm run dev (Vite) → http://localhost:5173
 ├── APS Service: npm run dev → http://localhost:3001
-├── FastAPI: uvicorn main:app → http://localhost:8000
+├── FastAPI: python -m uvicorn api.main:app → http://localhost:8008
 ├── Neo4j Desktop: → bolt://localhost:7687
 └── BaseX Native: → http://localhost:8984 🆕
 ```
+
+**Note**: Backend must be started from `backend/` directory with module path `api.main:app` (not `main:app`) to support relative imports. Use `.\scripts\start-services.ps1` for automated startup.
 
 ### Production Environment (Planned)
 ```

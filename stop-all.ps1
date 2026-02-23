@@ -17,7 +17,7 @@ $ErrorActionPreference = 'SilentlyContinue'
 $root = $PSScriptRoot
 
 # Read port configuration from .env files
-$backendPort = 8000
+$backendPort = 8008
 $frontendPort = if ($env:FRONTEND_PORT) { [int]$env:FRONTEND_PORT } else { 5173 }
 $apsPort = 3001
 

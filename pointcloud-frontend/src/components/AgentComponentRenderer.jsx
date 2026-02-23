@@ -194,10 +194,10 @@ function AlertComponent({ data }) {
   const style = styles[type] || styles.info;
   
   const icons = {
-    info: "ℹ️",
-    success: "✅",
-    warning: "⚠️",
-    error: "❌",
+    info: "[i]",
+    success: "[OK]",
+    warning: "[!]",
+    error: "[X]",
   };
 
   return (

@@ -66,7 +66,7 @@ Write-Host "--- Configuration ---" -ForegroundColor Cyan
 # Frontend port (can be overridden via FRONTEND_PORT env var)
 $frontendPort = if ($env:FRONTEND_PORT) { [int]$env:FRONTEND_PORT } else { 5173 }
 
-$apiBaseUrl = "http://127.0.0.1:8000"
+$apiBaseUrl = "http://127.0.0.1:8008"
 $apsServiceUrl = "http://127.0.0.1:3001"
 
 if (Test-Path ".env") {
@@ -78,7 +78,7 @@ if (Test-Path ".env") {
 } else {
   Write-Host "[!] .env file: Creating default..." -ForegroundColor Yellow
   @"
-VITE_BACKEND_API_URL=http://127.0.0.1:8000
+VITE_BACKEND_API_URL=http://127.0.0.1:8008
 VITE_APS_API_URL=http://127.0.0.1:3001
 VITE_OLLAMA_URL=http://localhost:11434
 VITE_NEO4J_URI=bolt://localhost:7687

@@ -48,6 +48,11 @@ export function createOssMdApi({ config, getAppAuthHeader, getUserAuthHeader }) 
         console.log('[ensureBucket] created:', created);
         return { ok: true, bucketKey, existed: false };
       } catch (createErr) {
+        // 409 = Bucket already exists, which is fine
+        if (createErr?.response?.status === 409 || createErr?.axiosError?.response?.status === 409) {
+          console.log('[ensureBucket] bucket already exists (409), continuing...');
+          return { ok: true, bucketKey, existed: true };
+        }
         console.error('[ensureBucket] create failed:', createErr);
         throw createErr;
       }

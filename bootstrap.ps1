@@ -89,7 +89,7 @@ if (-not $SkipBackend) {
     @"
 # BIMTwinOps Backend Configuration
 BACKEND_HOST=127.0.0.1
-BACKEND_PORT=8000
+BACKEND_PORT=8008
 
 # Neo4j (optional)
 NEO4J_URI=bolt://localhost:7687
@@ -128,7 +128,7 @@ if (-not $SkipFrontend) {
     $frontendEnv = [IO.Path]::Combine($frontendDir, '.env')
     if (-not (Test-Path $frontendEnv)) {
       @"
-VITE_BACKEND_API_URL=http://127.0.0.1:8000
+VITE_BACKEND_API_URL=http://127.0.0.1:8008
 VITE_APS_API_URL=http://127.0.0.1:3001
 VITE_OLLAMA_URL=http://localhost:11434
 VITE_NEO4J_URI=bolt://localhost:7687
@@ -160,9 +160,17 @@ if ((Test-Path $apsDir) -and (-not $SkipFrontend)) {
     $apsEnv = [IO.Path]::Combine($apsDir, '.env')
     if (-not (Test-Path $apsEnv)) {
       @"
+# Autodesk Platform Services (APS) – replace placeholders with real credentials
 APS_CLIENT_ID=your_autodesk_client_id
 APS_CLIENT_SECRET=your_autodesk_client_secret
 APS_SERVICE_PORT=3001
+APS_BUCKET_KEY=smartbim-demo-bucket
+APS_OSS_REGION=US
+APS_OAUTH_SCOPES=data:read data:write data:create bucket:create bucket:read viewables:read
+APS_SCOPES=data:read
+# APS_CALLBACK_URL=http://localhost:3001/api/auth/callback
+# APS_CORS_ORIGINS=http://localhost:5173
+# REDIS_URL=redis://localhost:6379
 "@ | Out-File -FilePath $apsEnv -Encoding UTF8
       Write-Host "  Created aps-service/.env" -ForegroundColor Green
     }

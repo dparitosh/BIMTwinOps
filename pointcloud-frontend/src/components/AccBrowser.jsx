@@ -219,6 +219,7 @@ export default function AccBrowser({ apsBaseUrl, onUrnReady }) {
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
           </svg>
           <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>ACC Docs Browser</span>
+          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'rgba(245, 158, 11, 0.1)', color: '#d97706', border: '1px solid rgba(245, 158, 11, 0.3)', fontWeight: 600 }}>3-LEGGED OAUTH</span>
         </div>
         <button
           onClick={status.logged_in ? loadHubs : login}
@@ -226,6 +227,15 @@ export default function AccBrowser({ apsBaseUrl, onUrnReady }) {
         >
           {status.logged_in ? "Load Hubs" : "Login"}
         </button>
+      </div>
+
+      {/* Info banner for 2-legged users */}
+      <div className="px-3 py-2 rounded-lg text-sm" style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', color: '#2563eb' }}>
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>[INFO] This requires 3-legged OAuth (user authorization)</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+          For <strong>server-to-server (2-legged)</strong> uploads, use <strong>Revit Integration</strong> tab instead. 
+          Your files will upload directly to bucket: <code style={{ background: 'rgba(0,0,0,0.05)', padding: '2px 4px', borderRadius: 2 }}>bim-spatial-bhupesh-us-001</code>
+        </div>
       </div>
 
       <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: status.logged_in ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', border: `1px solid ${status.logged_in ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}` }}>

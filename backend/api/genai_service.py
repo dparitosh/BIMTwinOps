@@ -62,10 +62,6 @@ class BIMTwinOpsGenAI:
         )
         self._neo4j_database = neo4j_database or cfg.NEO4J_DATABASE
 
-    def _session(self):
-        """Return a Neo4j session targeting the configured database."""
-        return self.neo4j_driver.session(database=self._neo4j_database)
-        
         # System prompts for different tasks
         self.system_prompts = {
             "kg_query": """You are an expert in building information modeling (BIM), 
@@ -118,6 +114,10 @@ Consider:
 
 Return suggestions in JSON format with: {enrichments: [{type, target, suggestion, rationale}]}"""
         }
+
+    def _session(self):
+        """Return a Neo4j session targeting the configured database."""
+        return self.neo4j_driver.session(database=self._neo4j_database)
     
     def close(self):
         """Close Neo4j connection"""
@@ -219,7 +219,7 @@ Important:
                 response_format={"type": "json_object"}
             )
             
-            result = json.loads(response.choices[0].message.content)
+            result = json.loads(response.choices[0].message.content or "{}")
             logger.info(f"Generated Cypher: {result.get('cypher_query')}")
             return result
             
@@ -255,10 +255,10 @@ Relationship Types:
         results: List[Dict],
         original_query: str,
         limit: int
-    ) -> List[Dict]:
+    ) -> Dict:
         """Enhance query results with AI-generated summaries and relevance scores"""
         if not results:
-            return []
+            return {"summary": "No results found", "result_count": 0, "results": []}
         
         # Truncate results
         results = results[:limit]
@@ -286,7 +286,7 @@ Return JSON: {{"summary": "...", "result_count": N}}"""
                 response_format={"type": "json_object"}
             )
             
-            summary = json.loads(response.choices[0].message.content)
+            summary = json.loads(response.choices[0].message.content or "{}")
             
             return {
                 "summary": summary.get("summary", ""),
@@ -367,7 +367,7 @@ Return JSON with this structure:
                 response_format={"type": "json_object"}
             )
             
-            result = json.loads(response.choices[0].message.content)
+            result = json.loads(response.choices[0].message.content or "{}")
             return result.get("properties", [])
             
         except Exception as e:
@@ -400,7 +400,7 @@ Return JSON with this structure:
     def suggest_classifications(
         self,
         element_description: str,
-        available_systems: List[str] = None
+        available_systems: Optional[List[str]] = None
     ) -> List[Dict]:
         """
         Suggest appropriate classifications for an element
@@ -451,7 +451,7 @@ Suggest the most appropriate classifications. Return JSON:
                 response_format={"type": "json_object"}
             )
             
-            result = json.loads(response.choices[0].message.content)
+            result = json.loads(response.choices[0].message.content or "{}")
             return result.get("classifications", [])
             
         except Exception as e:
@@ -483,7 +483,7 @@ Suggest the most appropriate classifications. Return JSON:
     def chat(
         self,
         message: str,
-        conversation_history: List[Dict] = None
+        conversation_history: Optional[List[Dict]] = None
     ) -> str:
         """
         Natural language chat interface for knowledge graph
@@ -528,7 +528,7 @@ map classifications, and query the knowledge graph. Be concise and helpful."""
                 max_tokens=500
             )
             
-            return response.choices[0].message.content
+            return response.choices[0].message.content or ""
             
         except Exception as e:
             logger.error(f"Chat failed: {e}")
@@ -546,8 +546,8 @@ if __name__ == "__main__":
     
     # Initialize GenAI service
     genai = BIMTwinOpsGenAI(
-        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-        azure_api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT", ""),
+        azure_api_key=os.getenv("AZURE_OPENAI_API_KEY", ""),
         deployment_name=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o"),
         neo4j_uri=os.getenv("NEO4J_URI", ""),
         neo4j_user=os.getenv("NEO4J_USER", ""),

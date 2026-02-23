@@ -400,9 +400,9 @@ export default function PointCloudViewer({
 
   // --- Robust: react to external selectedSegmentId prop ---
   useEffect(() => {
-    console.log('[PointCloudViewer] 🔵 useEffect triggered - selectedSegmentId:', selectedSegmentId);
+    console.log('[PointCloudViewer] [DEBUG] useEffect triggered - selectedSegmentId:', selectedSegmentId);
     const pointsMesh = pointsMeshRef.current;
-    console.log('[PointCloudViewer] 🔵 pointsMesh exists:', !!pointsMesh);
+    console.log('[PointCloudViewer] [DEBUG] pointsMesh exists:', !!pointsMesh);
 
     // helper: clear highlights
     const clearHighlights = () => {

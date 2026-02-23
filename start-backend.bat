@@ -37,11 +37,11 @@ echo.
 echo ========================================
 echo FastAPI Server
 echo ========================================
-echo   API URL:  http://127.0.0.1:8000
-echo   Docs:     http://127.0.0.1:8000/docs
-echo   GraphQL:  http://127.0.0.1:8000/api/graphql
+echo   API URL:  http://127.0.0.1:8008
+echo   Docs:     http://127.0.0.1:8008/docs
+echo   GraphQL:  http://127.0.0.1:8008/api/graphql
 echo ========================================
 echo Press Ctrl+C to stop
 echo.
 
-python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8008

@@ -3,8 +3,15 @@ import io
 import re
 import json
 import logging
+import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+# Add parent directory to path for pointnet_s3dis import
+_backend_dir = Path(__file__).parent.parent
+if str(_backend_dir) not in sys.path:
+    sys.path.insert(0, str(_backend_dir))
 
 import numpy as np
 import requests
@@ -87,8 +94,42 @@ WITHIN_RE = re.compile(r"(within|less than|under)\s+([0-9]*\.?[0-9]+)\s*(m|meter
 COUNT_RE = re.compile(r"(how many|number of|count of)\s+([a-z0-9 _-]+)", re.I)
 LIST_RE = re.compile(r"(find|show|list|what are|give me)\s+(?:all|every)?\s*([a-z0-9 _-]+)", re.I)
 
-app = FastAPI(title="BIMTwinOps API", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=cfg.CORS_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+@asynccontextmanager
+async def lifespan(_application: FastAPI):
+    """Startup/shutdown lifecycle — ensures Neo4j drivers are closed cleanly."""
+    logger.info("BIMTwinOps API starting up")
+    yield
+    # --- Shutdown ---
+    logger.info("BIMTwinOps API shutting down — closing Neo4j drivers")
+    if driver is not None:
+        try:
+            driver.close()
+            logger.info("Main Neo4j driver closed")
+        except Exception as exc:
+            logger.warning("Error closing main Neo4j driver: %s", exc)
+    # Close KG-routes singleton drivers (if initialised)
+    try:
+        from .kg_routes import _kg_schema, _genai_service
+        if _kg_schema is not None:
+            _kg_schema.close()
+            logger.info("KG schema driver closed")
+        if _genai_service is not None:
+            _genai_service.close()
+            logger.info("GenAI service Neo4j driver closed")
+    except Exception as exc:
+        logger.warning("Error closing kg_routes drivers: %s", exc)
+    # kg_graphql now reuses kg_routes singletons — no separate driver to close
+
+
+app = FastAPI(title="BIMTwinOps API", version="2.0.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cfg.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=cfg.CORS_METHODS,
+    allow_headers=cfg.CORS_HEADERS,
+)
 
 # Import and include Knowledge Graph routes
 try:
@@ -155,6 +196,28 @@ except Exception as e:
     logger.error(f"Revit Integration API not available: {e}", exc_info=True)
 
 
+@app.get("/health")
+def health():
+    """Root health endpoint - checks backend API availability and Neo4j connection"""
+    neo4j_connected = False
+    if driver is not None:
+        try:
+            with driver.session(database=NEO4J_DATABASE) as session:
+                row = session.run("RETURN 1 AS ok").single()
+                neo4j_connected = bool(row and row.get("ok") == 1)
+        except Exception:
+            neo4j_connected = False
+    
+    return {
+        "status": "healthy",
+        "service": "BIMTwinOps API",
+        "version": "2.0.0",
+        "port": cfg.BACKEND_PORT,
+        "neo4j_connected": neo4j_connected,
+        "llm_provider": LLM_PROVIDER,
+    }
+
+
 @app.get("/health/neo4j")
 def health_neo4j():
     """Basic Neo4j connectivity check (and verifies the selected database exists)."""
@@ -165,7 +228,7 @@ def health_neo4j():
             row = session.run("RETURN 1 AS ok").single()
         return {"ok": bool(row and row.get("ok") == 1), "database": NEO4J_DATABASE, "uri": NEO4J_URI}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Neo4j health check failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Neo4j health check failed: {e}") from e
 
 class ChatReq(BaseModel):
     question: str
@@ -180,8 +243,8 @@ async def upload_pointcloud(file: UploadFile = File(...)):
     if filename_lower.endswith(('.ifc', '.rvt', '.dwg', '.dxf', '.nwd', '.nwc')):
         raise HTTPException(
             status_code=400,
-            detail=f"BIM model files (.ifc, .rvt, etc.) should be uploaded via APS Viewer tab, not PointCloud tab. "
-                   f"This endpoint accepts .npy point cloud files or text-based coordinate files (CSV/TXT)."
+            detail="BIM model files (.ifc, .rvt, etc.) should be uploaded via APS Viewer tab, not PointCloud tab. "
+                   "This endpoint accepts .npy point cloud files or text-based coordinate files (CSV/TXT)."
         )
     
     data = await file.read()
@@ -196,7 +259,7 @@ async def upload_pointcloud(file: UploadFile = File(...)):
             raise HTTPException(
                 status_code=400,
                 detail=f"Failed to parse file as point cloud data. Expected .npy or text coordinates (CSV/TXT). Error: {str(e)}"
-            )
+            ) from e
     
     scene_id = os.path.splitext(filename)[0]
     try:
@@ -399,11 +462,11 @@ def neo4j_json(v: Any):
     except Exception:
         return str(v)
 
-def run_cypher_and_serialize(cypher: str) -> List[Dict[str, Any]]:
+def run_cypher_and_serialize(cypher: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     if driver is None:
         raise RuntimeError("Neo4j driver is not available")
     with driver.session(database=NEO4J_DATABASE) as session:
-        results = session.run(cypher).data()
+        results = session.run(cypher, parameters=params or {}).data()
     json_rows = []
     for row in results:
         j = {}
@@ -412,50 +475,56 @@ def run_cypher_and_serialize(cypher: str) -> List[Dict[str, Any]]:
         json_rows.append(j)
     return json_rows
 
-def fallback_pattern_cypher(question: str, scene_id: Optional[str]) -> Tuple[str, str]:
+def fallback_pattern_cypher(question: str, scene_id: Optional[str]) -> Tuple[str, str, Dict[str, Any]]:
+    """Return (cypher, explanation, params) using parameterised queries to prevent injection."""
     q = (question or "").lower()
+    params: Dict[str, Any] = {}
     m = DIST_BETWEEN_RE.search(q)
     if m and scene_id:
         a = m.group(1).strip()
         b = m.group(2).strip()
         cy = (
-            f"MATCH (a:PointCloudSegment {{sceneId: '{scene_id}'}}), (b:PointCloudSegment {{sceneId: '{scene_id}'}}) "
-            f"WHERE toLower(a.semanticLabel) CONTAINS toLower('{a}') AND toLower(b.semanticLabel) CONTAINS toLower('{b}') "
-            f"RETURN a.segmentId AS a_id, b.segmentId AS b_id, point.distance(a.centroidPoint, b.centroidPoint) AS dist LIMIT 10"
+            "MATCH (a:PointCloudSegment {sceneId: $sceneId}), (b:PointCloudSegment {sceneId: $sceneId}) "
+            "WHERE toLower(a.semanticLabel) CONTAINS toLower($labelA) AND toLower(b.semanticLabel) CONTAINS toLower($labelB) "
+            "RETURN a.segmentId AS a_id, b.segmentId AS b_id, point.distance(a.centroidPoint, b.centroidPoint) AS dist LIMIT 10"
         )
-        return cy, f"Distance between {a} and {b}"
+        params = {"sceneId": scene_id, "labelA": a, "labelB": b}
+        return cy, f"Distance between {a} and {b}", params
     m2 = WITHIN_RE.search(q)
     if m2 and scene_id:
         meters = float(m2.group(2))
         target = m2.group(4).strip()
         cy = (
-            f"MATCH (t:PointCloudSegment {{sceneId: '{scene_id}'}}) "
-            f"WHERE toLower(t.semanticLabel) CONTAINS toLower('{target}') "
-            f"WITH t "
-            f"MATCH (o:PointCloudSegment {{sceneId: '{scene_id}'}}) "
-            f"WHERE o.segmentId <> t.segmentId AND point.distance(t.centroidPoint, o.centroidPoint) <= {meters} "
-            f"RETURN o.segmentId AS id, o.semanticLabel AS semanticLabel, point.distance(t.centroidPoint, o.centroidPoint) AS dist LIMIT 200"
+            "MATCH (t:PointCloudSegment {sceneId: $sceneId}) "
+            "WHERE toLower(t.semanticLabel) CONTAINS toLower($target) "
+            "WITH t "
+            "MATCH (o:PointCloudSegment {sceneId: $sceneId}) "
+            "WHERE o.segmentId <> t.segmentId AND point.distance(t.centroidPoint, o.centroidPoint) <= $meters "
+            "RETURN o.segmentId AS id, o.semanticLabel AS semanticLabel, point.distance(t.centroidPoint, o.centroidPoint) AS dist LIMIT 200"
         )
-        return cy, f"Objects within {meters} m of {target}"
+        params = {"sceneId": scene_id, "target": target, "meters": meters}
+        return cy, f"Objects within {meters} m of {target}", params
     m3 = COUNT_RE.search(q)
     if m3 and scene_id:
         sem = m3.group(2).strip().split()[0]
         cy = (
-            f"MATCH (s:PointCloudSegment {{sceneId: '{scene_id}'}}) "
-            f"WHERE toLower(s.semanticLabel) CONTAINS toLower('{sem}') "
-            f"RETURN count(s) AS count"
+            "MATCH (s:PointCloudSegment {sceneId: $sceneId}) "
+            "WHERE toLower(s.semanticLabel) CONTAINS toLower($sem) "
+            "RETURN count(s) AS count"
         )
-        return cy, f"Count of {sem}"
+        params = {"sceneId": scene_id, "sem": sem}
+        return cy, f"Count of {sem}", params
     m4 = LIST_RE.search(q)
     if m4 and scene_id:
         sem = m4.group(2).strip().split()[0]
         cy = (
-            f"MATCH (s:PointCloudSegment {{sceneId: '{scene_id}'}}) "
-            f"WHERE toLower(s.semanticLabel) CONTAINS toLower('{sem}') "
-            f"RETURN s.segmentId AS id, s.semanticLabel AS semanticLabel, s.pointCount AS pointCount LIMIT 200"
+            "MATCH (s:PointCloudSegment {sceneId: $sceneId}) "
+            "WHERE toLower(s.semanticLabel) CONTAINS toLower($sem) "
+            "RETURN s.segmentId AS id, s.semanticLabel AS semanticLabel, s.pointCount AS pointCount LIMIT 200"
         )
-        return cy, f"List segments matching {sem}"
-    return "", ""
+        params = {"sceneId": scene_id, "sem": sem}
+        return cy, f"List segments matching {sem}", params
+    return "", "", {}
 
 def call_gemini(system_instruction: str, user_prompt: str, timeout: int = 30) -> str:
     if not GOOGLE_API_KEY:
@@ -463,7 +532,7 @@ def call_gemini(system_instruction: str, user_prompt: str, timeout: int = 30) ->
     headers = {"Content-Type": "application/json", "x-goog-api-key": GOOGLE_API_KEY}
     merged = (system_instruction.strip() + "\n\n" + user_prompt.strip()).strip()
     body = {"contents": [{"parts": [{"text": merged}]}]}
-    last_err = None
+    last_err: Exception | RuntimeError | None = None
     for url in MODEL_ENDPOINTS:
         try:
             resp = requests.post(url, headers=headers, json=body, timeout=timeout)
@@ -490,7 +559,7 @@ def call_gemini(system_instruction: str, user_prompt: str, timeout: int = 30) ->
         except Exception as e:
             last_err = e
             continue
-    raise RuntimeError(f"Gemini failed: {last_err}")
+    raise RuntimeError(f"Gemini failed: {last_err}") from last_err
 
 
 def call_ollama(system_instruction: str, user_prompt: str, timeout: int = 60) -> str:
@@ -514,10 +583,10 @@ def call_ollama(system_instruction: str, user_prompt: str, timeout: int = 60) ->
             raise RuntimeError(f"Ollama error {resp.status_code}: {resp.text}")
         data = resp.json()
         return data.get("response", "")
-    except requests.exceptions.ConnectionError:
-        raise RuntimeError(f"Cannot connect to Ollama at {OLLAMA_BASE_URL}. Make sure Ollama is running.")
+    except requests.exceptions.ConnectionError as exc:
+        raise RuntimeError(f"Cannot connect to Ollama at {OLLAMA_BASE_URL}. Make sure Ollama is running.") from exc
     except Exception as e:
-        raise RuntimeError(f"Ollama failed: {e}")
+        raise RuntimeError(f"Ollama failed: {e}") from e
 
 
 def call_llm(system_instruction: str, user_prompt: str, timeout: int = 60) -> str:
@@ -599,6 +668,7 @@ async def chat(req: ChatReq):
         raise HTTPException(status_code=400, detail="Empty question")
 
     cypher = ""
+    cypher_params: Dict[str, Any] = {}
     llm_explain = ""
     # 1) Try to get cypher from LLM
     try:
@@ -607,20 +677,22 @@ async def chat(req: ChatReq):
     except Exception as e:
         raw_llm = ""
         # try local fallback pattern before failing
-        cy_from_pattern, explain = fallback_pattern_cypher(req.question, req.scene_id)
+        cy_from_pattern, explain, fb_params = fallback_pattern_cypher(req.question, req.scene_id)
         if cy_from_pattern:
             cypher = cy_from_pattern
+            cypher_params = fb_params
             llm_explain = f"(fallback pattern) {explain}"
         else:
-            raise HTTPException(status_code=502, detail=f"LLM error: {e}")
+            raise HTTPException(status_code=502, detail=f"LLM error: {e}") from e
     else:
         cypher, llm_explain = extract_cypher_from_text(raw_llm)
         cypher = normalize_distance_and_sanitize(cypher)
         # if LLM didn't produce cypher, try local pattern fallback
         if not cypher:
-            cy_from_pattern, explain = fallback_pattern_cypher(req.question, req.scene_id)
+            cy_from_pattern, explain, fb_params = fallback_pattern_cypher(req.question, req.scene_id)
             if cy_from_pattern:
                 cypher = cy_from_pattern
+                cypher_params = fb_params
                 llm_explain = f"(fallback pattern) {explain}"
 
     if not cypher:
@@ -633,10 +705,10 @@ async def chat(req: ChatReq):
         raise HTTPException(status_code=400, detail="Generated Cypher missing scene_id filter")
 
     try:
-        rows = run_cypher_and_serialize(cypher)
+        rows = run_cypher_and_serialize(cypher, cypher_params)
     except Exception as e:
         # helpful debug info: return cypher attempted
-        raise HTTPException(status_code=500, detail=f"Neo4j error: {e}. Cypher: {cypher!r}")
+        raise HTTPException(status_code=500, detail=f"Neo4j error: {e}. Cypher: {cypher!r}") from e
 
     # conservative rewrite if empty results
     if not rows:

@@ -79,11 +79,17 @@ export default function OssUploadTranslate({ apsBaseUrl, onUrnReady }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div className="flex items-center gap-2">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--tcs-orange)" strokeWidth="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-        </svg>
-        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Local Upload → OSS</span>
+      {/* Section Header */}
+      <div className="mb-1">
+        <div className="flex items-center gap-2 mb-2">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--tcs-orange)" strokeWidth="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+          </svg>
+          <span style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>Quick Preview</span>
+        </div>
+        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+          Upload local CAD/BIM files for fast viewing. Files are stored in OSS bucket without knowledge graph processing.
+        </p>
       </div>
       
       {error && (

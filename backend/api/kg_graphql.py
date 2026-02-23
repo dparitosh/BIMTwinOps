@@ -9,9 +9,8 @@ import strawberry
 from strawberry.scalars import JSON
 from strawberry.fastapi import GraphQLRouter
 
-from .config import cfg
 from .knowledge_graph_schema import KnowledgeGraphSchema
-from .bsdd_client import BSDDClient, BSDDEnvironment
+from .bsdd_client import BSDDClient
 from .ifc_mapping import (
     map_bsdd_dictionary_to_ifc_classification,
     map_bsdd_class_to_ifc_classification_reference,
@@ -19,34 +18,10 @@ from .ifc_mapping import (
     map_bsdd_material_to_ifc_material
 )
 
+# Reuse singletons from kg_routes to avoid duplicate Neo4j drivers
+from .kg_routes import get_kg_schema, get_bsdd_client   # noqa: E402
+
 logger = logging.getLogger(__name__)
-
-# Initialize clients
-_kg_schema = None
-_bsdd_client = None
-
-
-def get_kg_schema() -> KnowledgeGraphSchema:
-    """Get or create knowledge graph schema singleton"""
-    global _kg_schema
-    if _kg_schema is None:
-        if not cfg.NEO4J_PASSWORD:
-            raise ValueError("NEO4J_PASSWORD environment variable is required")
-        _kg_schema = KnowledgeGraphSchema(
-            neo4j_uri=cfg.NEO4J_URI,
-            neo4j_user=cfg.NEO4J_USER,
-            neo4j_password=cfg.NEO4J_PASSWORD,
-            database=cfg.NEO4J_DATABASE
-        )
-    return _kg_schema
-
-
-def get_bsdd_client() -> BSDDClient:
-    """Get or create bSDD client singleton"""
-    global _bsdd_client
-    if _bsdd_client is None:
-        _bsdd_client = BSDDClient(environment=BSDDEnvironment.PRODUCTION)
-    return _bsdd_client
 
 
 # ============================================================================

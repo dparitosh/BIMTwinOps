@@ -20,18 +20,35 @@ const RevitIntegration = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('upload'); // upload, parse, import, validate
 
-  const API_BASE = 'http://localhost:8001';
+  const API_BASE = import.meta.env.VITE_BACKEND_API_URL || 'http://127.0.0.1:8008';
 
   // Handle file selection
   const handleFileSelect = (event) => {
     const file = event.target.files[0];
-    if (file && file.name.endsWith('.ifc')) {
-      setSelectedFile(file);
-      setError(null);
-    } else {
+    
+    // BUGFIX: Validate file type and size
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+    
+    if (!file.name.endsWith('.ifc')) {
       setError('Please select a valid IFC file (.ifc extension)');
       setSelectedFile(null);
+      return;
     }
+    
+    // BUGFIX: Reject files over 100MB (typical IFC files are 10-50MB)
+    const maxSizeMB = 100;
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > maxSizeMB) {
+      setError(`File too large: ${fileSizeMB.toFixed(2)}MB. Maximum size is ${maxSizeMB}MB`);
+      setSelectedFile(null);
+      return;
+    }
+    
+    setSelectedFile(file);
+    setError(null);
   };
 
   // Upload IFC file
@@ -61,8 +78,14 @@ const RevitIntegration = () => {
       setUploadedFileId(data.file_id);
       setActiveTab('parse');
       
-      // Auto-parse after upload
-      await handleParse(data.file_id);
+      // BUGFIX: Auto-parse after upload with proper error handling
+      try {
+        await handleParse(data.file_id);
+      } catch (parseErr) {
+        // Don't fail the upload, but show parse error to user
+        console.error('[Revit] Auto-parse failed:', parseErr);
+        setError(`Upload successful, but auto-parse failed: ${parseErr.message}. Try manually clicking Parse.`);
+      }
       
     } catch (err) {
       setError(`Upload error: ${err.message}`);
@@ -184,15 +207,15 @@ const RevitIntegration = () => {
   return (
     <div className="revit-integration">
       <div className="header">
-        <h2>🏗️ Revit bSDD Plugin Integration</h2>
+        <h2>[BUILD] BIM Knowledge Graph Pipeline</h2>
         <p className="subtitle">
-          Import IFC files with buildingSMART Data Dictionary classifications from Revit
+          Extract bSDD classifications from IFC files and import to Neo4j semantic graph. Use this for data enrichment and AI-powered queries, not for model viewing.
         </p>
       </div>
 
       {error && (
         <div className="error-banner">
-          ⚠️ {error}
+          [!] {error}
         </div>
       )}
 
@@ -256,7 +279,7 @@ const RevitIntegration = () => {
               disabled={!selectedFile || loading}
               className="primary-button"
             >
-              {loading ? '⏳ Uploading...' : '📤 Upload & Parse'}
+              {loading ? '[...] Uploading...' : '[>>] Upload & Parse'}
             </button>
           </div>
         )}
@@ -320,7 +343,7 @@ const RevitIntegration = () => {
               className="primary-button"
               disabled={loading}
             >
-              {loading ? '⏳ Importing...' : '💾 Import to Neo4j'}
+              {loading ? '[...] Importing...' : '[SAVE] Import to Neo4j'}
             </button>
           </div>
         )}
@@ -331,7 +354,7 @@ const RevitIntegration = () => {
             <h3>Import Results</h3>
             
             <div className="success-banner">
-              ✅ Successfully imported {importResult.imported_count} classifications to Neo4j
+              [OK] Successfully imported {importResult.imported_count} classifications to Neo4j
             </div>
 
             <div className="info-section">
@@ -362,7 +385,7 @@ const RevitIntegration = () => {
               className="primary-button"
               disabled={loading}
             >
-              {loading ? '⏳ Validating...' : '🔍 Validate vs Point Cloud'}
+              {loading ? '[...] Validating...' : '[?] Validate vs Point Cloud'}
             </button>
           </div>
         )}

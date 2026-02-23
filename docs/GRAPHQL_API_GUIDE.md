@@ -4,8 +4,8 @@
 The GraphQL API provides a flexible, efficient way to query the BIMTwinOps knowledge graph. Unlike REST endpoints that require multiple requests, GraphQL allows you to fetch exactly the data you need in a single query.
 
 ## Endpoint
-- **GraphQL Endpoint**: `http://localhost:8001/api/graphql`
-- **GraphiQL UI**: `http://localhost:8001/api/graphql` (Interactive playground in browser)
+- **GraphQL Endpoint**: `http://localhost:8008/api/graphql`
+- **GraphiQL UI**: `http://localhost:8008/api/graphql` (Interactive playground in browser)
 
 ## Setup
 
@@ -17,11 +17,12 @@ pip install strawberry-graphql[fastapi]>=0.246.0
 
 2. **Start the Server**
 ```bash
-uvicorn main:app --reload --port 8001
+cd backend
+python -m uvicorn api.main:app --reload --port 8008
 ```
 
 3. **Access GraphiQL**
-Open your browser to `http://localhost:8001/api/graphql` for an interactive GraphQL playground with:
+Open your browser to `http://localhost:8008/api/graphql` for an interactive GraphQL playground with:
 - Auto-completion
 - Documentation explorer
 - Query validation

@@ -1,6 +1,22 @@
 import React, { useState, useEffect, useRef } from "react";
 
-export default function AnnotationPanel({ selected, sceneData, onSegmentSelect }) {
+const SEMANTIC_CLASSES = [
+  { id: 0, name: "ceiling" },
+  { id: 1, name: "floor" },
+  { id: 2, name: "wall" },
+  { id: 3, name: "beam" },
+  { id: 4, name: "column" },
+  { id: 5, name: "window" },
+  { id: 6, name: "door" },
+  { id: 7, name: "chair" },
+  { id: 8, name: "table" },
+  { id: 9, name: "bookcase" },
+  { id: 10, name: "sofa" },
+  { id: 11, name: "board" },
+  { id: 12, name: "clutter" }
+];
+
+export default function AnnotationPanel({ selected, sceneData, onSegmentSelect, onSegmentUpdate }) {
   const [expandedCategories, setExpandedCategories] = useState({});
   const [sceneExpanded, setSceneExpanded] = useState(true);
 
@@ -222,6 +238,53 @@ export default function AnnotationPanel({ selected, sceneData, onSegmentSelect }
                 <div style={{ color: 'var(--text-secondary)' }} className="mb-1">Centroid:</div>
                 <div className="p-2 rounded text-xs" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)', fontFamily: 'monospace' }}>
                   [{seg.centroid.map(v => v.toFixed(2)).join(', ')}]
+                </div>
+              </div>
+            )}
+            
+            {/* Reclassification UI */}
+            {onSegmentUpdate && (
+              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-light)' }}>
+                <div style={{ color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 600 }}>
+                  Reclassify:
+                </div>
+                <select
+                  value={seg.segment_key}
+                  onChange={(e) => {
+                    const newClassId = parseInt(e.target.value);
+                    const newClass = SEMANTIC_CLASSES.find(c => c.id === newClassId);
+                    if (newClass) {
+                      onSegmentUpdate(selectedSegId, {
+                        semanticClassId: newClassId,
+                        semanticLabel: newClass.name,
+                        userModified: true
+                      });
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-light)',
+                    background: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {SEMANTIC_CLASSES.map(cls => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ 
+                  marginTop: '6px', 
+                  fontSize: '11px', 
+                  color: 'var(--text-muted)',
+                  fontStyle: 'italic' 
+                }}>
+                  Changes auto-save in 5 seconds
                 </div>
               </div>
             )}

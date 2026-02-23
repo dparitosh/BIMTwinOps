@@ -241,3 +241,161 @@ async def health_check():
             "status": "unhealthy",
             "error": str(e)
         }
+
+
+# New endpoints for segment persistence and synchronization
+
+class SegmentUpdate(BaseModel):
+    """Update data for a point cloud segment"""
+    segment_id: str
+    semantic_class_id: Optional[int] = None
+    semantic_label: Optional[str] = None
+    confidence: Optional[float] = None
+    user_modified: bool = False
+
+
+class BulkUpdateRequest(BaseModel):
+    """Request to update multiple segments"""
+    segments: List[SegmentUpdate]
+
+
+class BulkUpdateResponse(BaseModel):
+    """Response after bulk update"""
+    updated_count: int
+    scene_id: str
+    timestamp: str
+    errors: List[str] = []
+
+
+@router.get("/{scene_id}/segments")
+async def get_segments(scene_id: str):
+    """
+    Get all segments for a point cloud scene from Neo4j
+    
+    Args:
+        scene_id: Point cloud scene identifier
+        
+    Returns:
+        List of segments with their current state
+    """
+    try:
+        service = get_service()
+        
+        with service.kg.driver.session(database=cfg.NEO4J_DATABASE) as session:
+            result = session.run("""
+                MATCH (s:PointCloudSegment)
+                WHERE s.sceneId = $scene_id
+                RETURN s.segmentId as id,
+                       s.semanticClassId as semantic_class_id,
+                       s.semanticLabel as semantic_label,
+                       s.confidence as confidence,
+                       s.pointCount as point_count,
+                       s.centroid as centroid,
+                       s.userModified as user_modified
+                ORDER BY s.segmentId
+            """, scene_id=scene_id)
+            
+            segments = [
+                {
+                    "id": r["id"],
+                    "semanticClassId": r["semantic_class_id"],
+                    "semanticLabel": r["semantic_label"],
+                    "confidence": r["confidence"],
+                    "pointCount": r["point_count"],
+                    "centroid": r["centroid"],
+                    "userModified": r.get("user_modified", False)
+                }
+                for r in result
+            ]
+            
+            return {
+                "scene_id": scene_id,
+                "segments": segments,
+                "count": len(segments)
+            }
+            
+    except Exception as e:
+        logger.error(f"Failed to get segments for scene {scene_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{scene_id}/segments/bulk-update", response_model=BulkUpdateResponse)
+async def bulk_update_segments(scene_id: str, request: BulkUpdateRequest):
+    """
+    Bulk update point cloud segments in Neo4j
+    
+    This endpoint supports the frontend usePointCloudSync hook for
+    maintaining data consistency between React state and Neo4j.
+    
+    Args:
+        scene_id: Point cloud scene identifier
+        request: List of segment updates
+        
+    Returns:
+        Summary of update operation
+    """
+    try:
+        service = get_service()
+        errors = []
+        updated_count = 0
+        
+        with service.kg.driver.session(database=cfg.NEO4J_DATABASE) as session:
+            for segment_update in request.segments:
+                try:
+                    # Build dynamic SET clause based on provided fields
+                    set_clauses = []
+                    params = {
+                        "scene_id": scene_id,
+                        "segment_id": segment_update.segment_id
+                    }
+                    
+                    if segment_update.semantic_class_id is not None:
+                        set_clauses.append("s.semanticClassId = $semantic_class_id")
+                        params["semantic_class_id"] = segment_update.semantic_class_id
+                    
+                    if segment_update.semantic_label is not None:
+                        set_clauses.append("s.semanticLabel = $semantic_label")
+                        params["semantic_label"] = segment_update.semantic_label
+                    
+                    if segment_update.confidence is not None:
+                        set_clauses.append("s.confidence = $confidence")
+                        params["confidence"] = segment_update.confidence
+                    
+                    if segment_update.user_modified:
+                        set_clauses.append("s.userModified = true")
+                        set_clauses.append("s.lastModified = datetime()")
+                    
+                    if not set_clauses:
+                        continue  # Nothing to update
+                    
+                    set_clause = ", ".join(set_clauses)
+                    
+                    query = f"""
+                    MATCH (s:PointCloudSegment)
+                    WHERE s.sceneId = $scene_id AND s.segmentId = $segment_id
+                    SET {set_clause}
+                    RETURN s.segmentId as id
+                    """
+                    
+                    result = session.run(query, **params)
+                    if result.single():
+                        updated_count += 1
+                    else:
+                        errors.append(f"Segment {segment_update.segment_id} not found")
+                        
+                except Exception as e:
+                    error_msg = f"Failed to update segment {segment_update.segment_id}: {str(e)}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
+        
+        from datetime import datetime
+        return BulkUpdateResponse(
+            updated_count=updated_count,
+            scene_id=scene_id,
+            timestamp=datetime.utcnow().isoformat(),
+            errors=errors
+        )
+        
+    except Exception as e:
+        logger.error(f"Bulk update failed for scene {scene_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

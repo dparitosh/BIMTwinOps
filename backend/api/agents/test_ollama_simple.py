@@ -49,7 +49,7 @@ def test_ollama_connection():
     
     except requests.exceptions.ConnectionError:
         print(f"\n❌ Cannot connect to Ollama at {ollama_url}")
-        print("\n📋 Installation Steps:")
+        print("\n[STEPS] Installation Steps:")
         print("1. Download Ollama from https://ollama.ai")
         print("2. Install and run Ollama")
         print("3. Pull a model: ollama pull llama3.2")

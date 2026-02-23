@@ -63,9 +63,9 @@ Open http://localhost:5173 in your browser.
 | Service | URL | Description |
 |---------|-----|-------------|
 | Frontend | http://localhost:5173 | React + Vite app |
-| Backend API | http://localhost:8000 | FastAPI server |
-| API Docs | http://localhost:8000/docs | Swagger UI |
-| GraphQL | http://localhost:8000/api/graphql | GraphQL playground |
+| Backend API | http://localhost:8008 | FastAPI server |
+| API Docs | http://localhost:8008/docs | Swagger UI |
+| GraphQL | http://localhost:8008/api/graphql | GraphQL playground |
 | APS Service | http://localhost:3001 | Autodesk Platform Services |
 | BaseX Admin | http://localhost:8080/dba | BaseX database admin |
 
@@ -200,7 +200,7 @@ This will:
 ```env
 # Server Settings
 BACKEND_HOST=127.0.0.1
-BACKEND_PORT=8000
+BACKEND_PORT=8008
 
 # Neo4j (optional - for knowledge graph)
 NEO4J_URI=bolt://localhost:7687
@@ -220,7 +220,7 @@ OLLAMA_MODEL=llama3
 ### Frontend (`pointcloud-frontend/.env`)
 
 ```env
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://localhost:8008
 VITE_APS_SERVICE_URL=http://localhost:3001
 ```
 
@@ -290,14 +290,14 @@ When you run `.\start-all.ps1`, you'll see:
 [OK] node_modules: Found
 
 --- Configuration ---
-  Backend:       http://127.0.0.1:8000
+  Backend:       http://127.0.0.1:8008
   Frontend:      http://localhost:5173
   Neo4j:         bolt://localhost:7687
   Ollama:        http://localhost:11434
   Azure OpenAI:  (not configured)
 
 --- Port Check ---
-[OK] Port 8000: Ready
+[OK] Port 8008: Ready
 [OK] Port 5173: Ready
 
 --- Starting Services ---
@@ -337,7 +337,7 @@ Starting Frontend Server...
 Or manually:
 ```powershell
 # Find what's using the port
-Get-NetTCPConnection -LocalPort 8000 -State Listen
+Get-NetTCPConnection -LocalPort 8008 -State Listen
 
 # Kill the process
 Stop-Process -Id <PID> -Force
@@ -430,7 +430,7 @@ Remove-Item -Recurse -Force backend\aps-service\node_modules -ErrorAction Silent
 | **Start frontend only** | `.\start-frontend.ps1` |
 | **Stop frontend only** | `.\stop-frontend.ps1` |
 | **Run full setup** | `.\bootstrap.ps1` |
-| **View API docs** | http://localhost:8000/docs |
+| **View API docs** | http://localhost:8008/docs |
 | **Open app** | http://localhost:5173 |
 
 ---

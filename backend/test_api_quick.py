@@ -4,7 +4,7 @@ Quick API test for Point Cloud Semantic Labeling
 import requests
 import json
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "http://127.0.0.1:8008"
 
 print("Testing Point Cloud Semantic API...\n")
 

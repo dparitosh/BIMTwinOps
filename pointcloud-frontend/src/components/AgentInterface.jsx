@@ -32,6 +32,14 @@ export default function AgentInterface() {
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
+    // BUGFIX: Close previous SSE connection before starting new query
+    // Prevents memory leak from accumulating connections
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+      setStreaming(false);
+    }
+
     const userMessage = { role: "user", content: input, timestamp: new Date() };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
@@ -117,7 +125,8 @@ export default function AgentInterface() {
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // BUGFIX: Prevent sending while loading to avoid queuing multiple requests
+    if (e.key === "Enter" && !e.shiftKey && !loading) {
       e.preventDefault();
       handleSend();
     }

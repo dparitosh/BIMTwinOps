@@ -5,7 +5,7 @@ import requests
 
 try:
     # Get OpenAPI schema
-    response = requests.get("http://127.0.0.1:8000/openapi.json")
+    response = requests.get("http://127.0.0.1:8008/openapi.json")
     schema = response.json()
     
     print("=" * 80)

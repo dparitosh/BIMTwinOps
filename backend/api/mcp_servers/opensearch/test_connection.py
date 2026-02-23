@@ -55,7 +55,7 @@ try:
     
     # List indices
     indices = client.cat.indices(format="json")
-    print(f"\n📊 Found {len(indices)} indices:")
+    print(f"\n[DATA] Found {len(indices)} indices:")
     for idx in indices[:5]:  # Show first 5
         print(f"   - {idx['index']} ({idx['docs.count']} docs)")
     
@@ -63,7 +63,7 @@ try:
     
 except ConnectionError as e:
     print(f"\n❌ Connection failed: {e}")
-    print("\n💡 To start OpenSearch:")
+    print("\n[INFO] To start OpenSearch:")
     print("   Docker: docker run -d -p 9200:9200 -p 9600:9600 \\")
     print("           -e \"discovery.type=single-node\" \\")
     print("           opensearchproject/opensearch:latest")

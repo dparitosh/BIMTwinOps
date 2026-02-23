@@ -7,7 +7,7 @@ import json
 import logging
 from typing import List, Dict, Optional, Any
 
-from fastapi import APIRouter, HTTPException, Query, Body, UploadFile, File, BackgroundTasks, Depends, status
+from fastapi import APIRouter, HTTPException, Query, Body, UploadFile, File, BackgroundTasks, Depends, status, Header
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -41,6 +41,19 @@ _kg_schema = None
 _genai_service = None
 _basex_service = None
 _sync_manager = None
+
+
+async def require_api_key(x_api_key: str = Header(None, alias="X-API-Key")):
+    """Dependency that enforces API-key auth on admin endpoints.
+    If API_KEY is not configured (empty), the endpoint is unprotected (dev mode)."""
+    configured_key = cfg.API_KEY
+    if not configured_key:
+        return  # dev mode — no key required
+    if x_api_key != configured_key:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid or missing API key. Provide X-API-Key header."
+        )
 
 
 def get_bsdd_client() -> BSDDClient:
@@ -601,7 +614,7 @@ async def advanced_search(
 # Management Endpoints (P2.3)
 # =============================================================================
 
-@router.put("/dictionaries/{uri}/status")
+@router.put("/dictionaries/{uri}/status", dependencies=[Depends(require_api_key)])
 async def update_dictionary_status(uri: str, status_val: str = Body(..., alias="status", embed=True)):
     """Update dictionary status (Preview/Active/Inactive) (P2.3.1)"""
     try:
@@ -628,7 +641,7 @@ async def get_dictionary_versions(uri: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/dictionaries/{uri}/translate")
+@router.post("/dictionaries/{uri}/translate", dependencies=[Depends(require_api_key)])
 async def add_dictionary_translation(uri: str, language_code: str = Body(...), translation: dict = Body(...)):
     """Add translation to dictionary (P2.3.3)"""
     try:
@@ -641,7 +654,7 @@ async def add_dictionary_translation(uri: str, language_code: str = Body(...), t
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/dictionaries/{uri}")
+@router.delete("/dictionaries/{uri}", dependencies=[Depends(require_api_key)])
 async def delete_dictionary(uri: str, soft_delete: bool = Query(True)):
     """Delete dictionary (soft or hard) (P2.3.4)"""
     try:
@@ -772,13 +785,13 @@ async def get_graph_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/graph/cypher")
+@router.post("/graph/cypher", dependencies=[Depends(require_api_key)])
 async def execute_cypher(
     query: str = Body(..., embed=True),
     parameters: Optional[Dict[str, Any]] = Body(None, embed=True)
 ):
     """
-    Execute a custom Cypher query (admin only - add auth in production)
+    Execute a custom Cypher query (admin only — requires X-API-Key header)
     For advanced users to directly query the knowledge graph
     """
     try:

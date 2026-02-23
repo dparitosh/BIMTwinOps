@@ -4,7 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), '');
-	const backendUrl = env.VITE_BACKEND_API_URL || 'http://127.0.0.1:8000';
+	const backendUrl = env.VITE_BACKEND_API_URL || 'http://127.0.0.1:8008';
 	const apsUrl = env.VITE_APS_API_URL || 'http://127.0.0.1:3001';
 	const frontendPort = parseInt(env.VITE_FRONTEND_PORT || env.FRONTEND_PORT || '5173', 10);
 

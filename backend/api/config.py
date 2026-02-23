@@ -204,6 +204,24 @@ class _Config:
     def REDIS_URL(self) -> str:
         return os.getenv("REDIS_URL", "")
 
+    # ── API Security ──────────────────────────────────────────────────────
+    @property
+    def API_KEY(self) -> str:
+        """Optional API key for protecting admin endpoints.
+        When empty, admin endpoints are unprotected (dev mode)."""
+        return os.getenv("API_KEY", "")
+
+    @property
+    def CORS_METHODS(self) -> List[str]:
+        """Allowed HTTP methods for CORS. Defaults to safe set."""
+        return _csv("CORS_METHODS", "GET,POST,PUT,DELETE,OPTIONS")
+
+    @property
+    def CORS_HEADERS(self) -> List[str]:
+        """Allowed HTTP headers for CORS. Defaults to common set."""
+        return _csv("CORS_HEADERS",
+                     "Content-Type,Authorization,X-API-Key,Accept")
+
     # ── Frontend ──────────────────────────────────────────────────────────
     @property
     def FRONTEND_PORT(self) -> int:

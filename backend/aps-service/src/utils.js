@@ -19,7 +19,9 @@ export function setCookie(res, name, value, opts = {}) {
   if (opts.httpOnly !== false) parts.push('HttpOnly');
   parts.push(`SameSite=${opts.sameSite || 'Lax'}`);
   if (opts.maxAge !== undefined) parts.push(`Max-Age=${opts.maxAge}`);
-  if (opts.secure) parts.push('Secure');
+  // In production (non-localhost), always set Secure flag
+  const isProduction = opts.secure || (typeof process !== 'undefined' && process.env.NODE_ENV === 'production');
+  if (isProduction) parts.push('Secure');
   res.setHeader('Set-Cookie', parts.join('; '));
 }
 

@@ -9,20 +9,21 @@
  *  5. GraphQL playground link
  */
 import React, { useState, useEffect, useCallback } from "react";
+import ApiResponseViewer from "./ApiResponseViewer";
 
-const API_URL = import.meta.env.VITE_BACKEND_API_URL || "http://127.0.0.1:8000";
+const API_URL = import.meta.env.VITE_BACKEND_API_URL || "http://127.0.0.1:8008";
 const APS_URL = import.meta.env.VITE_APS_API_URL || "http://127.0.0.1:3001";
 const OLLAMA_URL = import.meta.env.VITE_OLLAMA_URL || "http://localhost:11434";
 const NEO4J_URI = import.meta.env.VITE_NEO4J_URI || "bolt://localhost:7687";
 
 // ── Agent Registry ──────────────────────────────────────────────────────
 const AGENTS = [
-  { id: "orchestrator", name: "Agent Orchestrator", description: "LangGraph state machine that routes queries to specialist agents", module: "agent_orchestrator.py", icon: "🧠" },
-  { id: "query",    name: "Query Agent",       description: "Generates Cypher queries and searches the Knowledge Graph",          module: "query_agent.py",    icon: "🔍" },
-  { id: "action",   name: "Action Agent",      description: "Executes write operations on the Knowledge Graph with HITL",        module: "action_agent.py",   icon: "⚡" },
-  { id: "planning", name: "Planning Agent",    description: "Breaks complex tasks into multi-step execution plans",              module: "planning_agent.py", icon: "📋" },
-  { id: "executor", name: "Executor Agent",    description: "Executes approved action plans against backend services",            module: "executor_agent.py", icon: "🚀" },
-  { id: "compliance", name: "Compliance Agent", description: "Validates IFC models against bSDD standards & regulations",         module: "compliance_agent.py", icon: "✅" },
+  { id: "orchestrator", name: "Agent Orchestrator", description: "LangGraph state machine that routes queries to specialist agents", module: "agent_orchestrator.py", icon: "[CORE]" },
+  { id: "query",    name: "Query Agent",       description: "Generates Cypher queries and searches the Knowledge Graph",          module: "query_agent.py",    icon: "[?]" },
+  { id: "action",   name: "Action Agent",      description: "Executes write operations on the Knowledge Graph with HITL",        module: "action_agent.py",   icon: "[*]" },
+  { id: "planning", name: "Planning Agent",    description: "Breaks complex tasks into multi-step execution plans",              module: "planning_agent.py", icon: "[LIST]" },
+  { id: "executor", name: "Executor Agent",    description: "Executes approved action plans against backend services",            module: "executor_agent.py", icon: "[>>]" },
+  { id: "compliance", name: "Compliance Agent", description: "Validates IFC models against bSDD standards & regulations",         module: "compliance_agent.py", icon: "[OK]" },
 ];
 
 // ── Endpoint Groups ─────────────────────────────────────────────────────
@@ -143,7 +144,7 @@ export default function OpenApiTab() {
     try {
       const body = method === "POST" ? getDefaultBody(path) : null;
       const result = await quickTest(method, path, body);
-      setTestResult({ method, path, ...result });
+      setTestResult({ method, path, body, ...result });
     } catch (err) {
       setTestResult({ method, path, ok: false, error: err.message, ms: 0 });
     } finally {
@@ -153,10 +154,10 @@ export default function OpenApiTab() {
 
   // ── Sections ──
   const sections = [
-    { id: "health",    label: "System Health",   icon: "💚" },
-    { id: "agents",    label: "Agents",          icon: "🤖" },
-    { id: "endpoints", label: "Endpoints",       icon: "🔌" },
-    { id: "swagger",   label: "Swagger UI",      icon: "📖" },
+    { id: "health",    label: "System Health",   icon: "[HEALTH]" },
+    { id: "agents",    label: "Agents",          icon: "[AGENT]" },
+    { id: "endpoints", label: "Endpoints",       icon: "[API]" },
+    { id: "swagger",   label: "Swagger UI",      icon: "[DOCS]" },
   ];
 
   return (
@@ -164,7 +165,7 @@ export default function OpenApiTab() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "var(--surface)", borderRadius: 12, border: "1px solid var(--border-light)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 24 }}>🔌</span>
+          <span style={{ fontSize: 24 }}>[API]</span>
           <div>
             <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>API & Agent Dashboard</h2>
             <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0 }}>
@@ -199,10 +200,10 @@ export default function OpenApiTab() {
 
 function HealthSection({ results, loading, onRefresh }) {
   const services = [
-    { key: "backend", label: "Backend API", url: `${API_URL}`, icon: "⚙️", desc: "FastAPI server (port 8000)" },
-    { key: "neo4j",   label: "Neo4j KG",    url: NEO4J_URI,     icon: "🔗", desc: "Knowledge Graph database" },
-    { key: "ollama",  label: "Ollama LLM",   url: OLLAMA_URL,    icon: "🧠", desc: "Local AI model server" },
-    { key: "aps",     label: "APS Service",  url: `${APS_URL}`,               icon: "🏗️", desc: "Autodesk Platform Services" },
+    { key: "backend", label: "Backend API", url: `${API_URL}`, icon: "[API]", desc: "FastAPI server (port 8000)" },
+    { key: "neo4j",   label: "Neo4j KG",    url: NEO4J_URI,     icon: "[DB]", desc: "Knowledge Graph database" },
+    { key: "ollama",  label: "Ollama LLM",   url: OLLAMA_URL,    icon: "[AI]", desc: "Local AI model server" },
+    { key: "aps",     label: "APS Service",  url: `${APS_URL}`,               icon: "[APS]", desc: "Autodesk Platform Services" },
   ];
 
   return (
@@ -278,17 +279,17 @@ function AgentsSection() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, flexWrap: "wrap", fontSize: 12, color: "var(--text-secondary)" }}>
           <FlowBox label="User Query" color="#3b82f6" />
           <Arrow />
-          <FlowBox label="🧠 Orchestrator" color="#8b5cf6" />
+          <FlowBox label="[CORE] Orchestrator" color="#8b5cf6" />
           <Arrow />
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <FlowBox label="🔍 Query" color="#10b981" small />
-            <FlowBox label="⚡ Action" color="#f59e0b" small />
-            <FlowBox label="📋 Planning" color="#6366f1" small />
+            <FlowBox label="[?] Query" color="#10b981" small />
+            <FlowBox label="[*] Action" color="#f59e0b" small />
+            <FlowBox label="[LIST] Planning" color="#6366f1" small />
           </div>
           <Arrow />
-          <FlowBox label="🚀 Executor" color="#ec4899" />
+          <FlowBox label="[>>] Executor" color="#ec4899" />
           <Arrow />
-          <FlowBox label="✅ HITL Approval" color="#10b981" />
+          <FlowBox label="[OK] HITL Approval" color="#10b981" />
         </div>
       </div>
 
@@ -317,10 +318,10 @@ function AgentsSection() {
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>MCP Tool Servers</div>
         <div style={{ display: "flex", gap: 12 }}>
           {[
-            { name: "Neo4j MCP", desc: "Cypher queries, schema ops, node CRUD", icon: "🔗" },
-            { name: "bSDD MCP",  desc: "Dictionary search, class lookup, IFC mapping", icon: "📚" },
-            { name: "BaseX MCP", desc: "XML/IFC document storage & XQuery", icon: "📁" },
-            { name: "OpenSearch MCP", desc: "Full-text search & semantic embeddings", icon: "🔎" },
+            { name: "Neo4j MCP", desc: "Cypher queries, schema ops, node CRUD", icon: "[DB]" },
+            { name: "bSDD MCP",  desc: "Dictionary search, class lookup, IFC mapping", icon: "[DOCS]" },
+            { name: "BaseX MCP", desc: "XML/IFC document storage & XQuery", icon: "[XML]" },
+            { name: "OpenSearch MCP", desc: "Full-text search & semantic embeddings", icon: "[?]" },
           ].map(t => (
             <div key={t.name} style={{ flex: 1, padding: "10px 12px", background: "var(--bg-tertiary)", borderRadius: 8, fontSize: 12 }}>
               <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{t.icon} {t.name}</div>
@@ -381,8 +382,8 @@ function EndpointsSection({ onTest, testResult, testLoading, onClearResult }) {
 
       {/* Test result */}
       {testResult && (
-        <div style={{ padding: 16, background: "var(--surface)", borderRadius: 12, border: `1px solid ${testResult.ok ? "#10b981" : "#ef4444"}40` }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 16, background: "var(--surface)", borderRadius: 12, border: `1px solid ${testResult.ok ? "#10b981" : "#ef4444"}40` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: `${methodColor[testResult.method]}18`, color: methodColor[testResult.method] }}>{testResult.method}</span>
               <code style={{ fontSize: 12, color: "var(--text-primary)" }}>{testResult.path}</code>
@@ -393,9 +394,34 @@ function EndpointsSection({ onTest, testResult, testLoading, onClearResult }) {
               <button onClick={onClearResult} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-secondary)", fontSize: 16 }}>&times;</button>
             </div>
           </div>
-          <pre style={{ fontSize: 11, fontFamily: "monospace", color: "var(--text-secondary)", background: "var(--bg-tertiary)", padding: 12, borderRadius: 8, overflowX: "auto", maxHeight: 200, margin: 0 }}>
-            {typeof testResult.data === "string" ? testResult.data : JSON.stringify(testResult.data, null, 2)}
-          </pre>
+          
+          {/* Request body if POST/PUT/PATCH */}
+          {testResult.body && (
+            <ApiResponseViewer response={testResult.body} title="Request Body" />
+          )}
+          
+          {/* Response data */}
+          {testResult.data && (
+            <ApiResponseViewer 
+              response={testResult.data} 
+              title={`Response (${testResult.status || 'ERR'})`} 
+            />
+          )}
+          
+          {/* Error message if failed */}
+          {testResult.error && (
+            <div style={{ 
+              marginTop: 16, 
+              padding: 16, 
+              background: '#fee2e2', 
+              border: '1px solid #ef4444', 
+              borderRadius: 12,
+              color: '#991b1b'
+            }}>
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>Error</div>
+              <div style={{ fontFamily: 'monospace', fontSize: 12 }}>{testResult.error}</div>
+            </div>
+          )}
         </div>
       )}
     </div>
