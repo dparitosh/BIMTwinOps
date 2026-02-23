@@ -144,7 +144,7 @@ except Exception as e:
 # Import and include GraphQL API
 try:
     from .kg_graphql import graphql_router
-    app.include_router(graphql_router, prefix="", tags=["GraphQL"])
+    app.include_router(graphql_router, prefix="/api/graphql", tags=["GraphQL"])
     logger.info("GraphQL API enabled at /api/graphql (GraphiQL UI available)")
 except ImportError as e:
     logger.warning(f"GraphQL API not available: {e}")

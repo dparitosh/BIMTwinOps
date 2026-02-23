@@ -988,11 +988,11 @@ class Mutation:
 schema = strawberry.Schema(query=Query, mutation=Mutation)
 
 # Create GraphQL router for FastAPI
-graphql_router = GraphQLRouter(
-    schema,
-    path="/api/graphql",
-    graphiql=True  # Enable GraphiQL UI
-)
+# strawberry >=0.234 uses graphql_ide instead of graphiql; path is set in include_router
+try:
+    graphql_router = GraphQLRouter(schema, graphql_ide="graphiql")  # strawberry >=0.234
+except TypeError:
+    graphql_router = GraphQLRouter(schema, graphiql=True)  # strawberry <0.234 fallback
 
 
 # ============================================================================
