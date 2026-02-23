@@ -124,17 +124,20 @@ if (-not $SkipFrontend) {
     Write-Host "  Installing npm dependencies..." -ForegroundColor Yellow
     npm install --silent
     
-    # Create .env if not exists
-    $frontendEnv = [IO.Path]::Combine($frontendDir, '.env')
+    # Create .env.local if not exists (leave VITE_ URLs blank — Vite proxy handles routing in dev)
+    $frontendEnv = [IO.Path]::Combine($frontendDir, '.env.local')
     if (-not (Test-Path $frontendEnv)) {
       @"
-VITE_BACKEND_API_URL=http://127.0.0.1:8008
-VITE_APS_API_URL=http://127.0.0.1:3001
+# BIMTwinOps Frontend - Local Environment
+# In dev mode (npm run dev), leave these blank - Vite proxy handles routing.
+# In production/remote environments, set them to the actual service URLs.
+VITE_BACKEND_API_URL=
+VITE_APS_API_URL=
 VITE_OLLAMA_URL=http://localhost:11434
 VITE_NEO4J_URI=bolt://localhost:7687
 VITE_FRONTEND_PORT=5173
 "@ | Out-File -FilePath $frontendEnv -Encoding UTF8
-      Write-Host "  Created pointcloud-frontend/.env" -ForegroundColor Green
+      Write-Host "  Created pointcloud-frontend/.env.local" -ForegroundColor Green
     }
   } finally {
     Pop-Location

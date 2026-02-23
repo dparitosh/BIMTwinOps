@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Start all BIMTwinOps services (Backend, Frontend, APS)
@@ -111,10 +111,10 @@ Write-Status "Starting Backend API (port 8008)..."
 $backendPath = Join-Path $PSScriptRoot "..\backend"
 $venvPython = Join-Path $PSScriptRoot "..\.venv\Scripts\python.exe"
 
-Start-Process pwsh -ArgumentList @(
+Start-Process powershell -ArgumentList @(
     "-NoExit",
     "-Command",
-    "cd '$backendPath'; & '$venvPython' -m uvicorn api.main:app --host 0.0.0.0 --port 8008 --reload"
+    "cd '$backendPath'; & '$venvPython' -m uvicorn api.main:app --host 127.0.0.1 --port 8008 --reload"
 ) -WindowStyle Normal
 
 Start-Sleep -Seconds 3
@@ -123,13 +123,13 @@ Start-Sleep -Seconds 3
 $backendCheck = $null
 for ($i = 1; $i -le 10; $i++) {
     try {
-        $backendCheck = Invoke-WebRequest -Uri "http://localhost:8008/health" -TimeoutSec 2 -UseBasicParsing -ErrorAction SilentlyContinue
+        $backendCheck = Invoke-WebRequest -Uri "http://127.0.0.1:8008/health" -TimeoutSec 2 -UseBasicParsing -ErrorAction SilentlyContinue
         if ($backendCheck.StatusCode -eq 200) {
             Write-Success "Backend API started successfully"
             break
         }
     } catch {
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Seconds 1
     }
 }
 
@@ -141,7 +141,7 @@ if (-not $backendCheck -or $backendCheck.StatusCode -ne 200) {
 Write-Status "Starting Frontend (port 5173)..."
 $frontendPath = Join-Path $PSScriptRoot "..\pointcloud-frontend"
 
-Start-Process pwsh -ArgumentList @(
+Start-Process powershell -ArgumentList @(
     "-NoExit",
     "-Command",
     "cd '$frontendPath'; npm run dev"
@@ -159,7 +159,7 @@ for ($i = 1; $i -le 10; $i++) {
             break
         }
     } catch {
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Seconds 1
     }
 }
 
@@ -171,7 +171,7 @@ if (-not $frontendCheck -or $frontendCheck.StatusCode -ne 200) {
 Write-Status "Starting APS Service (port 3001)..."
 $apsPath = Join-Path $PSScriptRoot "..\backend\aps-service"
 
-Start-Process pwsh -ArgumentList @(
+Start-Process powershell -ArgumentList @(
     "-NoExit",
     "-Command",
     "cd '$apsPath'; npm start"
@@ -189,7 +189,7 @@ for ($i = 1; $i -le 10; $i++) {
             break
         }
     } catch {
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Seconds 1
     }
 }
 
